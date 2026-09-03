@@ -30,10 +30,9 @@ const FONT_NAMES: string[] = [
   'LibertinusSerif-Regular.otf',
   'LibertinusSerif-Semibold.otf',
   'LibertinusSerif-SemiboldItalic.otf',
-  // 微软雅黑（本机复制，见 scripts/fetch-system-fonts.ps1；可能缺失，加载会告警跳过）
-  'msyh.ttc',
-  'msyhbd.ttc',
-  'wqy-zenhei.ttf', // 文泉驿正黑(开源 OFL)，思源宋替换，体积 -36MB
+  // MiSans（免费商用黑体）：常规 + Bold
+  'MiSans-Regular.otf',
+  'MiSans-Bold.otf',
   'NewCM10-Bold.otf',
   'NewCM10-BoldItalic.otf',
   'NewCM10-Italic.otf',

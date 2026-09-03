@@ -38,6 +38,3 @@ frontend/node_modules/
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 
-# 微软雅黑(本机复制,版权字体不进仓库)
-frontend/public/fonts/msyh.ttc
-frontend/public/fonts/msyhbd.ttc
