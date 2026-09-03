@@ -1,0 +1,2 @@
+# Chatty
+experimental Typst chatbot
