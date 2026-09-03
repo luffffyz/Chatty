@@ -42,6 +42,11 @@ export interface Provider {
     "APIKey": string;
 
     /**
+     * 该提供商常用的模型（切换为该提供商时自动恢复）
+     */
+    "Model": string;
+
+    /**
      * 扫描得到的可用模型列表（可选）
      */
     "Models": string[] | null;

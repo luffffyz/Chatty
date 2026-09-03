@@ -17,6 +17,7 @@ type Provider struct {
 	Label   string // 展示名
 	BaseURL string // 如 "https://openrouter.ai/api/v1"
 	APIKey  string
+	Model   string   // 该提供商常用的模型（切换为该提供商时自动恢复）
 	Models  []string // 扫描得到的可用模型列表（可选）
 }
 

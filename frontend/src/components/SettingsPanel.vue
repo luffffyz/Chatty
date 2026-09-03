@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import type { Settings } from '../../bindings/chatty/internal/config/models'
+import { computed, onMounted, reactive, ref } from 'vue'
+import type { Provider, Settings } from '../../bindings/chatty/internal/config/models'
 import { ChatService } from '../../bindings/chatty'
 import { useChat } from '../chat'
 
@@ -64,6 +64,132 @@ const MIN_SIZE = 12
 const MAX_SIZE = 22
 const aform = reactive({ theme: 'system', fontSize: 14, chartBg: '' })
 
+// ---------- 多提供商管理 ----------
+const provList = computed(() => state.settings?.providers ?? [])
+const activeId = computed(() => state.settings?.activeProviderId ?? '')
+const editing = reactive({ id: '', index: -1 })
+let cleanSnap = ''
+const makeActive = ref(true)
+
+function formSnap(): string {
+  return JSON.stringify([pform.label, pform.baseURL, pform.apiKey, pform.model, pform.models])
+}
+function isDirty(): boolean {
+  return formSnap() !== cleanSnap
+}
+function markClean() {
+  cleanSnap = formSnap()
+}
+function fillForm(p: Provider | null, setModelFromActive = true) {
+  if (!p) {
+    pform.label = ''
+    pform.baseURL = ''
+    pform.apiKey = ''
+    pform.model = ''
+    pform.models = []
+  } else {
+    pform.label = p.Label ?? ''
+    pform.baseURL = p.BaseURL ?? ''
+    pform.apiKey = p.APIKey ?? ''
+    pform.model = (setModelFromActive && state.settings?.activeProviderId === p.ID
+      ? state.settings?.activeModel
+      : p.Model) || p.Model || ''
+    pform.models = p.Models ?? []
+  }
+  scanMsg.value = ''
+}
+function resetNewForm() {
+  editing.id = ''
+  editing.index = -1
+  makeActive.value = true
+  fillForm(null)
+  markClean()
+}
+function confirmDiscard(): boolean {
+  if (!isDirty()) return true
+  return window.confirm('当前修改尚未保存，切换将丢失，是否继续？')
+}
+async function selectProvider(p: Provider, alsoActive: boolean) {
+  if (p.ID === editing.id) {
+    if (alsoActive) await setActiveOnly(p)
+    return
+  }
+  if (!confirmDiscard()) return
+  editing.id = p.ID
+  editing.index = findIndex(p.ID)
+  fillForm(p, false)
+  markClean()
+  if (alsoActive) await setActiveOnly(p)
+}
+function findIndex(id: string): number {
+  return provList.value.findIndex((x) => x.ID === id)
+}
+async function setActiveOnly(p: Provider) {
+  if (p.ID === activeId.value) return
+  const next = cloneBase()
+  next.activeProviderId = p.ID
+  if (p.Model) next.activeModel = p.Model
+  await doSave(next)
+}
+async function deleteProvider(p: Provider) {
+  if (!window.confirm(`删除提供商「${p.Label || p.ID}」？`)) return
+  const next = cloneBase()
+  const list = next.providers ?? []
+  next.providers = list.filter((x) => x.ID !== p.ID)
+  if (next.activeProviderId === p.ID) {
+    next.activeProviderId = next.providers[0]?.ID ?? ''
+    next.activeModel = next.providers[0]?.Model ?? ''
+  }
+  await doSave(next)
+  if (editing.id === p.ID) {
+    if (next.providers.length > 0) {
+      editing.id = ''
+      selectProvider(next.providers[0], false)
+    } else {
+      resetNewForm()
+    }
+  }
+}
+function newFromPreset(i: number) {
+  if (!confirmDiscard()) return
+  const p = PRESETS[i]
+  resetNewForm()
+  pform.label = p.label
+  pform.baseURL = p.baseURL
+  pform.model = p.example
+  markClean()
+}
+function genID(): string {
+  return 'p' + Date.now().toString(36)
+}
+function syncFromSettings() {
+  const cur = state.settings
+  if (!cur) return
+  aform.theme = cur.appearance?.theme ?? 'system'
+  aform.fontSize = cur.appearance?.fontSize ?? 14
+  aform.chartBg = cur.appearance?.chartBg ?? ''
+  pform.systemPrompt = cur.systemPrompt
+
+  // 无编辑目标(初次打开/目标被删)时，载入当前使用中的提供商
+  if (!editing.id) {
+    const ps = cur.providers ?? []
+    const active = ps.find((x) => x.ID === cur.activeProviderId) ?? ps[0] ?? null
+    if (!active) {
+      // 全新：预填首个预设作为模板
+      resetNewForm()
+      pform.label = PRESETS[0].label
+      pform.baseURL = PRESETS[0].baseURL
+      pform.model = PRESETS[0].example
+      markClean()
+      return
+    }
+    editing.id = active.ID
+    editing.index = findIndex(active.ID)
+    fillForm(active)
+    markClean()
+  }
+}
+
 function cloneBase(): Settings {
   const cur = state.settings
   return {
@@ -79,57 +205,42 @@ function cloneBase(): Settings {
   }
 }
 
-function syncFromSettings() {
-  const cur = state.settings
-  if (!cur) return
-
-  const p = cur.providers && cur.providers.length > 0 ? cur.providers[0] : null
-  if (p) {
-    pform.label = p.Label ?? 'OpenRouter'
-    pform.baseURL = p.BaseURL ?? PRESETS[0].baseURL
-    pform.apiKey = p.APIKey ?? ''
-    pform.model = cur.activeModel || PRESETS[0].example
-    pform.systemPrompt = cur.systemPrompt
-    pform.models = p.Models ?? []
-  }
-  aform.theme = cur.appearance?.theme ?? 'system'
-  aform.fontSize = cur.appearance?.fontSize ?? 14
-  aform.chartBg = cur.appearance?.chartBg ?? ''
-}
-
-function applyPreset(i: number) {
-  const p = PRESETS[i]
-  // 切换到不同提供商预设：清空 API Key / 模型 / 扫描结果，避免串配置
-  if (pform.baseURL !== p.baseURL || pform.label !== p.label) {
-    pform.label = p.label
-    pform.baseURL = p.baseURL
-    pform.apiKey = ''
-    pform.model = ''
-    pform.models = []
-    scanMsg.value = ''
-  }
-}
-
 async function saveProvider() {
   errMsg.value = ''
   if (!pform.baseURL.trim()) {
     errMsg.value = 'Base URL 不能为空'
     return
   }
+  if (!pform.label.trim()) {
+    errMsg.value = '请填写提供商名称'
+    return
+  }
   const next = cloneBase()
-  next.activeProviderId = 'default'
-  next.activeModel = pform.model.trim()
+  const list = next.providers ?? []
+  const provider: Provider = {
+    ID: editing.id || genID(),
+    Label: pform.label.trim(),
+    BaseURL: pform.baseURL.trim(),
+    APIKey: pform.apiKey.trim(),
+    Model: pform.model.trim(),
+    Models: pform.models,
+  }
+  const idx = list.findIndex((x) => x.ID === provider.ID)
+  if (idx >= 0) {
+    list[idx] = provider
+  } else {
+    list.push(provider)
+  }
+  next.providers = list
+  if (makeActive.value || next.activeProviderId === '') {
+    next.activeProviderId = provider.ID
+    next.activeModel = provider.Model
+  }
   next.systemPrompt = pform.systemPrompt
-  next.providers = [
-    {
-      ID: 'default',
-      Label: pform.label.trim() || 'default',
-      BaseURL: pform.baseURL.trim(),
-      APIKey: pform.apiKey.trim(),
-      Models: pform.models,
-    },
-  ]
   await doSave(next)
+  editing.id = provider.ID
+  editing.index = findIndex(provider.ID)
+  markClean()
 }
 
 async function saveAppearance() {
@@ -191,20 +302,52 @@ onMounted(syncFromSettings)
 
       <!-- ============ 提供商 ============ -->
       <template v-if="tab === 'provider'">
+        <!-- 已保存的提供商列表：切换即载入该提供商配置，不丢任何已保存项 -->
+        <div class="plist">
+          <div class="plist__head">
+            <span class="plist__title">已保存的提供商</span>
+            <button type="button" class="chip" @click="resetNewForm">＋ 新建</button>
+          </div>
+          <div
+            v-for="p in provList"
+            :key="p.ID"
+            class="pitem"
+            :class="{ 'pitem--on': p.ID === editing.id }"
+            @click="selectProvider(p, false)"
+          >
+            <input
+              type="radio"
+              :checked="p.ID === activeId"
+              class="pitem__radio"
+              title="设为当前使用"
+              @click.stop="setActiveOnly(p)"
+            />
+            <span class="pitem__name">{{ p.Label || p.ID }}</span>
+            <span class="pitem__base">{{ p.BaseURL }}</span>
+            <span class="pitem__active" v-if="p.ID === activeId">使用中</span>
+            <button class="pitem__del" title="删除" @click.stop="deleteProvider(p)">✕</button>
+          </div>
+          <p v-if="!provList.length" class="hint">还没有保存的提供商——用下方模板新建并保存。</p>
+        </div>
+
         <label class="field">
-          <span>服务</span>
+          <span>新建模板</span>
           <div class="presets">
             <button
               v-for="(p, i) in PRESETS"
               :key="p.label"
               type="button"
               class="chip"
-              :class="{ 'chip--on': pform.baseURL === p.baseURL }"
-              @click="applyPreset(i)"
+              @click="newFromPreset(i)"
             >
-              {{ p.label }}
+              ＋ {{ p.label }}
             </button>
           </div>
+        </label>
+
+        <label class="field">
+          <span>名称</span>
+          <input v-model="pform.label" type="text" placeholder="如 我的 DeepSeek" />
         </label>
 
         <label class="field">
@@ -247,7 +390,11 @@ onMounted(syncFromSettings)
 
         <p class="hint">API Key 明文保存在本地 settings.json，仅用于直连你配置的端点。</p>
 
-        <div class="row">
+        <div class="row row--between">
+          <label class="chk">
+            <input v-model="makeActive" type="checkbox" />
+            保存后设为当前使用
+          </label>
           <button class="btn" :disabled="saving" @click="saveProvider">保存</button>
         </div>
       </template>
@@ -514,6 +661,91 @@ onMounted(syncFromSettings)
   line-height: 22px;
   text-align: center;
   font-weight: 700;
+}
+.plist {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  margin-bottom: 16px;
+  background: var(--bg);
+}
+.plist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 8px;
+}
+.plist__title {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.pitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+.pitem:hover {
+  background: var(--surface-hover);
+}
+.pitem--on {
+  background: var(--accent-weak);
+}
+.pitem__radio {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.pitem__name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.pitem__base {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.pitem__active {
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.pitem__del {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+.pitem__del:hover {
+  color: var(--danger);
+}
+.row--between {
+  justify-content: space-between;
+  align-items: center;
+}
+.chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.chk input {
+  accent-color: var(--accent);
 }
 .btn {
   padding: 8px 22px;
