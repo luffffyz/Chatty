@@ -18,18 +18,30 @@ const error = ref('')
 let ro: ResizeObserver | null = null
 let timer: number | undefined
 
+// 侧栏固定宽度；消息排版宽 = 主窗口去掉侧栏后按比例取整。
+const SIDEBAR_PX = 240
+const MSG_RATIO = 0.9
+
+function windowMsgWidth(): number {
+  return Math.max(320, Math.floor((window.innerWidth - SIDEBAR_PX) * MSG_RATIO))
+}
+
 function measure() {
-  // 优先宿主宽度；布局未就绪时回退父级/窗口宽度，避免编译被跳过。
-  const w =
-    host.value?.clientWidth ??
-    host.value?.parentElement?.clientWidth ??
-    Math.floor(window.innerWidth * 0.85)
-  widthPx.value = Math.max(120, Math.floor(w))
+  // 宿主已布局且宽度合理时用之（贴合气泡），否则按主窗口比例，
+  // 避免挂载初期 clientWidth=0 导致排版过窄。
+  const hostW = host.value?.clientWidth || host.value?.parentElement?.clientWidth || 0
+  widthPx.value = hostW > 60 ? hostW : windowMsgWidth()
 }
 
 function scheduleCompile() {
   clearTimeout(timer)
   timer = window.setTimeout(() => void compile(), 90)
+}
+
+function onWindowResize() {
+  // 窗口变化时宽度跟随窗口比例重排
+  measure()
+  scheduleCompile()
 }
 
 async function compile() {
@@ -60,6 +72,7 @@ onMounted(async () => {
   measure()
   ro = new ResizeObserver(() => scheduleCompile())
   if (host.value) ro.observe(host.value)
+  window.addEventListener('resize', onWindowResize)
   await nextTick()
   compile()
 })
@@ -77,6 +90,7 @@ watch(() => view.theme, scheduleCompile)
 onBeforeUnmount(() => {
   clearTimeout(timer)
   ro?.disconnect()
+  window.removeEventListener('resize', onWindowResize)
 })
 </script>
 
