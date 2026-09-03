@@ -83,6 +83,7 @@ const renderedContent = computed(() => props.content)
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
+  color: #1f2328;
 }
 .msg__stream {
   margin: 0;
@@ -91,6 +92,7 @@ const renderedContent = computed(() => props.content)
   line-height: 1.6;
   font-family: inherit;
   font-size: inherit;
+  color: #1f2328;
 }
 .msg__cursor {
   animation: blink 1s step-end infinite;
@@ -111,5 +113,6 @@ const renderedContent = computed(() => props.content)
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #24292f;
 }
 </style>
