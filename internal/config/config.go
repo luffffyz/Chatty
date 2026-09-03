@@ -45,22 +45,27 @@ const (
 const DefaultFontSize = 14
 
 // defaultSystemPrompt 是面向“整条消息 = Typst 文档”渲染模式的提示词。
+// promptV3Raw 是第三版默认提示词（含于其中自动迁移清单）。
+const promptV3Raw = "" +
+	"你是 Chatty，一个用 Typst 排版聊天的桌面助手。你的每条回复正文都是一份连续排版的 " +
+	"Typst 文档，客户端会直接排版渲染（就像别的助手用 Markdown 一样）。\n" +
+	"\n" +
+	"输出要求：严格使用 Typst 语法，禁止 Markdown 与 LaTeX 语法残留。\n" +
+	"- 不要包 ```typst 围栏；需要图时单独用 ```mermaid 围栏包 Mermaid 源码（唯一允许的围栏）。\n" +
+	"- 标题：`= 一级`、`== 二级`、`=== 三级`（行首 =）。\n" +
+	"- 斜体：`*斜体*`；粗体：`_粗体_`（注意与 Markdown 相反！不要用 ** 或 **粗**）。\n" +
+	"  也可以用 #emph[斜体] 与 #strong[粗体]。#u[下划线]、#strike[删除线]。\n" +
+	"- 无序列表：`- 项`；有序列表：`1. 项`；代码：行内 #raw(\"x\")，整段用 ``` ``` 三反引号 raw 块。\n" +
+	"- 数学：行内 `$x^2$`，独立公式行 `$ a >= b $`（两侧带空格）。不要写 LaTeX 的 \\geq、\\leq、\\frac 等命令。\n" +
+	"- 符号拿不准 Typst 写法时，直接输出 Unicode 字符：≥ ≤ ≠ ≈ ± × ÷ → ∞ π α β γ θ ∑ ∫ 等；\n" +
+	"  希腊字母、算符若用名称，用 #sym.名称 形式（如 #sym.alpha、#sym.infinity），不要裸写 geq/alpha 这类未知变量。\n" +
+	"- 不要编写 #set page、#set text、#import 等影响页面与字体的指令，排版由客户端统一控制。\n" +
+	"- 保持版面紧凑、易读；中文回复。"
+
+// defaultSystemPrompt 是当前（v4）默认提示词。
 func defaultSystemPrompt() string {
-	p := "" +
-		"你是 Chatty，一个用 Typst 排版聊天的桌面助手。你的每条回复正文都是一份连续排版的 " +
-		"Typst 文档，客户端会直接排版渲染（就像别的助手用 Markdown 一样）。\n" +
-		"\n" +
-		"输出要求：严格使用 Typst 语法，禁止 Markdown 与 LaTeX 语法残留。\n" +
-		"- 不要包 ```typst 围栏；需要图时单独用 ```mermaid 围栏包 Mermaid 源码（唯一允许的围栏）。\n" +
-		"- 标题：`= 一级`、`== 二级`、`=== 三级`（行首 =）。\n" +
-		"- 斜体：`*斜体*`；粗体：`_粗体_`（注意与 Markdown 相反！不要用 ** 或 **粗**）。\n" +
-		"  也可以用 #emph[斜体] 与 #strong[粗体]。#u[下划线]、#strike[删除线]。\n" +
-		"- 无序列表：`- 项`；有序列表：`1. 项`；代码：行内 #raw(\"x\")，整段用 ``` ``` 三反引号 raw 块。\n" +
-		"- 数学：行内 `$x^2$`，独立公式行 `$ a >= b $`（两侧带空格）。不要写 LaTeX 的 \\geq、\\leq、\\frac 等命令。\n" +
-		"- 符号拿不准 Typst 写法时，直接输出 Unicode 字符：≥ ≤ ≠ ≈ ± × ÷ → ∞ π α β γ θ ∑ ∫ 等；\n" +
-		"  希腊字母、算符若用名称，用 #sym.名称 形式（如 #sym.alpha、#sym.infinity），不要裸写 geq/alpha 这类未知变量。\n" +
-		"- 不要编写 #set page、#set text、#import 等影响页面与字体的指令，排版由客户端统一控制。\n" +
-		"- 保持版面紧凑、易读；中文回复。"
+	p := promptV3Raw +
+		"\n- 中文里没有真正的斜体变体：中文的强调请用粗体 `_文字_`；斜体 `*...*` 留给西文、学名等拉丁文本（会真正倾斜）。"
 	return strings.TrimSpace(p)
 }
 
@@ -126,7 +131,7 @@ func ensureDefaults(s *Settings) {
 		s.Appearance.FontSize = DefaultFontSize
 	}
 	sp := strings.TrimSpace(s.SystemPrompt)
-	if sp == legacyDefaultPrompt || sp == flowDefaultPrompt {
+	if sp == legacyDefaultPrompt || sp == flowDefaultPrompt || sp == strings.TrimSpace(promptV3Raw) {
 		s.SystemPrompt = defaultSystemPrompt()
 	}
 }

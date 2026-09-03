@@ -30,6 +30,9 @@ const FONT_NAMES: string[] = [
   'LibertinusSerif-Regular.otf',
   'LibertinusSerif-Semibold.otf',
   'LibertinusSerif-SemiboldItalic.otf',
+  // 微软雅黑（本机复制，见 scripts/fetch-system-fonts.ps1；可能缺失，加载会告警跳过）
+  'msyh.ttc',
+  'msyhbd.ttc',
   'NewCM10-Bold.otf',
   'NewCM10-BoldItalic.otf',
   'NewCM10-Italic.otf',
