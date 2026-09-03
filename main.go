@@ -22,6 +22,7 @@ func init() {
 	application.RegisterEvent[ChatDeltaEvent]("chat:delta")
 	application.RegisterEvent[ChatDoneEvent]("chat:done")
 	application.RegisterEvent[ChatErrorEvent]("chat:error")
+	application.RegisterEvent[ChatThinkingEvent]("chat:thinking")
 }
 
 func main() {

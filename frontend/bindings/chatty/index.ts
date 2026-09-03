@@ -10,6 +10,7 @@ export type {
     ChatDeltaEvent,
     ChatDoneEvent,
     ChatErrorEvent,
+    ChatThinkingEvent,
     MessageDTO,
     SessionDTO
 } from "./models.js";

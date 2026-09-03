@@ -72,7 +72,7 @@ func TestStreamChat_CollectsDeltasAndResult(t *testing.T) {
 		mu2.Lock()
 		defer mu2.Unlock()
 		deltas = append(deltas, d)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("StreamChat error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestStreamChat_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	p := NewOpenAICompatible("test", srv.URL+"/v1", "bad-key")
-	_, err := p.StreamChat(context.Background(), ChatRequest{Model: "m", Messages: []Message{{Role: RoleUser, Content: "x"}}}, nil)
+	_, err := p.StreamChat(context.Background(), ChatRequest{Model: "m", Messages: []Message{{Role: RoleUser, Content: "x"}}}, nil, nil)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -130,7 +130,7 @@ func TestStreamChat_StreamErrorChunk(t *testing.T) {
 	defer srv.Close()
 
 	p := NewOpenAICompatible("test", srv.URL+"/v1", "k")
-	_, err := p.StreamChat(context.Background(), ChatRequest{Model: "m", Messages: []Message{{Role: RoleUser, Content: "x"}}}, nil)
+	_, err := p.StreamChat(context.Background(), ChatRequest{Model: "m", Messages: []Message{{Role: RoleUser, Content: "x"}}}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "upstream boom") {
 		t.Fatalf("error = %v", err)
 	}
@@ -155,8 +155,36 @@ func TestChat_CollectsFullContent(t *testing.T) {
 
 func TestStreamChat_MissingModel(t *testing.T) {
 	p := NewOpenAICompatible("test", "", "")
-	_, err := p.StreamChat(context.Background(), ChatRequest{}, nil)
+	_, err := p.StreamChat(context.Background(), ChatRequest{}, nil, nil)
 	if err == nil {
 		t.Fatal("want error for empty model")
+	}
+}
+
+func TestStreamChat_ForwardsThinking(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		think := `{"choices":[{"index":0,"delta":{"reasoning_content":"先想想"}}]}`
+		text := `{"choices":[{"index":0,"delta":{"content":"结论来了"}}]}`
+		fmt.Fprint(w, sseEvent(think)+sseEvent(think)+sseEvent(text)+sseEvent("[DONE]"))
+	}))
+	defer srv.Close()
+
+	p := NewOpenAICompatible("test", srv.URL+"/v1", "k")
+	var thinking, content string
+	res, err := p.StreamChat(
+		context.Background(),
+		ChatRequest{Model: "m", Messages: []Message{{Role: RoleUser, Content: "q"}}},
+		func(d string) { content += d },
+		func(d string) { thinking += d },
+	)
+	if err != nil {
+		t.Fatalf("StreamChat: %v", err)
+	}
+	if thinking != "先想想先想想" {
+		t.Errorf("thinking = %q", thinking)
+	}
+	if content != "结论来了" || res.Content != "结论来了" {
+		t.Errorf("content = %q res = %q", content, res.Content)
 	}
 }

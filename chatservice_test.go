@@ -22,7 +22,7 @@ type fakeProvider struct {
 
 func (f *fakeProvider) Name() string { return f.name }
 
-func (f *fakeProvider) StreamChat(_ context.Context, req llm.ChatRequest, onDelta llm.DeltaFunc) (*llm.ChatResult, error) {
+func (f *fakeProvider) StreamChat(_ context.Context, req llm.ChatRequest, onDelta, _ llm.DeltaFunc) (*llm.ChatResult, error) {
 	f.mu.Lock()
 	f.reqs = append(f.reqs, req)
 	f.mu.Unlock()

@@ -26,6 +26,15 @@ export interface ChatErrorEvent {
 }
 
 /**
+ * ChatThinkingEvent 在模型输出推理/思考文本时按增量推送（如 DeepSeek
+ * reasoner、OpenAI 推理模型的 reasoning_content）。
+ */
+export interface ChatThinkingEvent {
+    "sessionId": string;
+    "text": string;
+}
+
+/**
  * MessageDTO 是对前端暴露的单条消息。
  */
 export interface MessageDTO {

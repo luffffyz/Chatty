@@ -57,8 +57,12 @@ type sseChunk struct {
 	ID      string `json:"id"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int     `json:"index"`
-		Delta        Message `json:"delta"`
+		Index int `json:"index"`
+		Delta struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
@@ -71,7 +75,7 @@ type sseChunk struct {
 }
 
 // StreamChat 见 Provider 接口说明。
-func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDelta DeltaFunc) (*ChatResult, error) {
+func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDelta, onThinking DeltaFunc) (*ChatResult, error) {
 	if req.Model == "" {
 		return nil, errors.New("llm: model is required")
 	}
@@ -103,11 +107,12 @@ func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDe
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, p.errorFromResponse(resp)
 	}
-	return readEventStream(resp.Body, onDelta)
+	return readEventStream(resp.Body, onDelta, onThinking)
 }
 
-// readEventStream 逐行消费 SSE 响应，把文本增量交给 onDelta 并累积。
-func readEventStream(r io.Reader, onDelta DeltaFunc) (*ChatResult, error) {
+// readEventStream 逐行消费 SSE 响应，把文本增量交给 onDelta、推理增量
+// 交给 onThinking 并累积。
+func readEventStream(r io.Reader, onDelta, onThinking DeltaFunc) (*ChatResult, error) {
 	res := &ChatResult{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -137,6 +142,11 @@ func readEventStream(r io.Reader, onDelta DeltaFunc) (*ChatResult, error) {
 				res.Content += ch.Delta.Content
 				if onDelta != nil {
 					onDelta(ch.Delta.Content)
+				}
+			}
+			if ch.Delta.ReasoningContent != "" {
+				if onThinking != nil {
+					onThinking(ch.Delta.ReasoningContent)
 				}
 			}
 			if ch.FinishReason != nil {

@@ -47,14 +47,16 @@ type Provider interface {
 	Name() string
 	// StreamChat 流式执行一轮对话：onDelta 在每段增量文本到达时被同步
 	// 调用（可能为空实现），返回的 ChatResult.Content 为完整文本。
+	// onThinking 收到模型的推理/思考增量（如 DeepSeek 的 reasoning_content、
+	// OpenAI 推理模型的 reasoning_content）；无思考输出的模型不会调用它。
 	// ctx 被取消或超时会中止底层请求。
-	StreamChat(ctx context.Context, req ChatRequest, onDelta DeltaFunc) (*ChatResult, error)
+	StreamChat(ctx context.Context, req ChatRequest, onDelta, onThinking DeltaFunc) (*ChatResult, error)
 }
 
 // Chat 是流式接口的便捷封装：收集完整回复一次返回。
 func Chat(ctx context.Context, p Provider, req ChatRequest) (*ChatResult, error) {
 	var collected string
-	res, err := p.StreamChat(ctx, req, func(delta string) { collected += delta })
+	res, err := p.StreamChat(ctx, req, func(delta string) { collected += delta }, nil)
 	if err != nil {
 		return nil, err
 	}

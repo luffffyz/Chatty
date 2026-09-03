@@ -13,6 +13,8 @@ export interface ViewMessage {
   content: string
   streaming: boolean
   failed?: boolean
+  /** 模型的推理/思考文本（reasoning_content），仅流式期间存在 */
+  thinking?: string
 }
 
 interface ChatState {
@@ -111,7 +113,13 @@ async function send(text: string): Promise<void> {
   state.busy = true
   const um: ViewMessage = { key: nextKey('user'), role: 'user', content, streaming: false }
   state.messages.push(um)
-  const placeholder: ViewMessage = { key: nextKey('assistant'), role: 'assistant', content: '', streaming: true }
+  const placeholder: ViewMessage = {
+    key: nextKey('assistant'),
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    thinking: '',
+  }
   state.messages.push(placeholder)
 
   try {
@@ -139,11 +147,21 @@ function bindEvents() {
     if (m) {
       m.streaming = false
       m.content = d.content
+      m.thinking = ''
     } else {
       state.messages.push({ key: nextKey('assistant'), role: 'assistant', content: d.content, streaming: false })
     }
     state.busy = false
     loadSessions() // 刷新排序与标题
+  })
+
+  Events.On('chat:thinking', (ev) => {
+    const d = ev.data
+    if (d.sessionId !== state.currentId) return
+    const m = streamingMsg()
+    if (m && !m.content) {
+      m.thinking = (m.thinking ?? '') + d.text
+    }
   })
 
   Events.On('chat:error', (ev) => {

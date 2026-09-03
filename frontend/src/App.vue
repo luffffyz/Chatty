@@ -86,6 +86,7 @@ function fmtTime(ms: number): string {
             :content="m.content"
             :streaming="m.streaming"
             :failed="m.failed"
+            :thinking="m.thinking"
           />
         </template>
         <div v-else class="empty">

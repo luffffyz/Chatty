@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { Clipboard } from '@wailsio/runtime'
 import { splitTypstMessage } from '../lib/blocks'
 import TypstDoc from './TypstDoc.vue'
 import MermaidBlock from './MermaidBlock.vue'
@@ -10,6 +11,7 @@ const props = defineProps<{
   content: string
   streaming?: boolean
   failed?: boolean
+  thinking?: string
 }>()
 
 const isUser = computed(() => props.role === 'user')
@@ -18,6 +20,17 @@ const isUser = computed(() => props.role === 'user')
 const seg = computed(() =>
   props.role === 'assistant' && !props.streaming ? splitTypstMessage(props.content) : null,
 )
+
+const copied = ref(false)
+async function copyRaw() {
+  try {
+    await Clipboard.SetText(props.content)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1600)
+  } catch {
+    /* 忽略剪贴板失败 */
+  }
+}
 </script>
 
 <template>
@@ -29,9 +42,13 @@ const seg = computed(() =>
 
       <!-- 流式中/出错 -->
       <template v-else-if="!seg">
-        <div v-if="streaming && !content" class="msg__thinking" aria-label="思考中">
-          <span class="msg__thinking-label">思考中</span>
-          <span class="msg__dots"><i></i><i></i><i></i></span>
+        <!-- 有真实 thinking 文本才展示"思考中"；否则低调等待 -->
+        <div v-if="streaming && !content" class="msg__wait">
+          <template v-if="thinking && thinking.trim()">
+            <div class="msg__think-head">思考中</div>
+            <div class="msg__think-body">{{ thinking }}</div>
+          </template>
+          <span v-else class="msg__dots"><i></i><i></i><i></i></span>
         </div>
         <template v-else>
           <pre class="msg__plain"><span>{{ content }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
@@ -46,6 +63,11 @@ const seg = computed(() =>
           <MermaidBlock :source="d" />
         </div>
       </template>
+
+      <!-- 复制 raw 原文（排查排版用） -->
+      <button v-if="!isUser && content && !streaming" class="msg__copy" @click="copyRaw">
+        {{ copied ? '已复制' : '复制 raw' }}
+      </button>
     </div>
   </div>
 </template>
@@ -86,17 +108,33 @@ const seg = computed(() =>
   font-size: inherit;
   color: var(--text);
 }
-.msg__thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.msg__wait {
   color: var(--text-faint);
   font-size: var(--fs-sm);
-  padding: 4px 0;
+  padding: 2px 0;
+}
+.msg__think-head {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.msg__think-body {
+  font-size: var(--fs-xs);
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 11em;
+  overflow-y: auto;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
 }
 .msg__dots {
   display: inline-flex;
   gap: 4px;
+  padding: 4px 0;
 }
 .msg__dots i {
   width: 5px;
@@ -137,5 +175,25 @@ const seg = computed(() =>
 }
 .msg__diagram {
   margin-top: 10px;
+}
+.msg__copy {
+  display: block;
+  margin: 6px 0 0 auto;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.msg:hover .msg__copy {
+  opacity: 1;
+}
+.msg__copy:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 </style>

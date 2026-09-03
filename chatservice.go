@@ -33,6 +33,13 @@ type ChatErrorEvent struct {
 	Error     string `json:"error"`
 }
 
+// ChatThinkingEvent 在模型输出推理/思考文本时按增量推送（如 DeepSeek
+// reasoner、OpenAI 推理模型的 reasoning_content）。
+type ChatThinkingEvent struct {
+	SessionID string `json:"sessionId"`
+	Text      string `json:"text"`
+}
+
 // ---------- 对外 DTO（避免直接暴露含 time.Time 的内部模型） ----------
 
 // SessionDTO 是对前端暴露的会话摘要。
@@ -221,6 +228,9 @@ func (s *ChatService) runCompletion(sessionID, text string) {
 	res, err := prov.StreamChat(ctx, req, func(delta string) {
 		full.WriteString(delta)
 		s.emitter.Emit("chat:delta", ChatDeltaEvent{SessionID: sessionID, Delta: delta})
+	}, func(think string) {
+		// 推理文本逐段透传，前端据此展示"思考中"状态
+		s.emitter.Emit("chat:thinking", ChatThinkingEvent{SessionID: sessionID, Text: think})
 	})
 	if err != nil {
 		emitErr("请求失败: " + err.Error())
