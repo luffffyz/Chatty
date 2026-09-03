@@ -20,7 +20,9 @@ experimental Typst chatbot —— 以 **Typst 为默认文本格式**的本地�
 | WebView2 runtime | Windows 10/11 一般自带 |
 
 注意：`wails3` 装在 `$(go env GOPATH)\bin`，Windows 下需保证它在 `PATH` 中；
-Taskfile 内部的 `sh:` 步骤需要 `C:\Program Files\Git\usr\bin`（或 scoop 等安装位置）也在 `PATH`。
+Taskfile 内部的 `sh:` 步骤需要 Git 的 `usr\bin`（如 `C:\Users\tz\scoop\apps\git\current\usr\bin` 或
+`C:\Program Files\Git\usr\bin`）也在 `PATH`——缺它时 `wails3 dev/build` 会打印
+`"uname"/"tail" executable file not found` 噪音（不影响构建，但建议加上）。
 
 ## 常用命令
 
