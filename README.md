@@ -27,12 +27,19 @@ Taskfile 内部的 `sh:` 步骤需要 Git 的 `usr\bin`（如 `C:\Users\tz\scoop
 ## 常用命令
 
 ```powershell
-# 开发（热重载）
-wails3 dev
+# 开发（自动起 vite dev server + wails3 dev；退出时清理）
+powershell -ExecutionPolicy Bypass -File scripts\dev.ps1
+
+# 或手动双进程：
+#   终端 1: cd frontend; npm run dev -- --port 9245 --strictPort
+#   终端 2: wails3 dev
 
 # 构建生产版（输出 bin/chatty.exe）
 wails3 build
 ```
+
+> 说明：Wails v3 的 dev 模式需要前端 vite(端口 9245)先就绪；
+> 若直接 `wails3 dev` 报 `unable to connect to frontend server`，请改用上面的脚本/双进程方式。
 
 ## 参考
 
