@@ -152,10 +152,27 @@ func (s *ChatService) SaveSettings(st *config.Settings) error {
 	return nil
 }
 
+// ListModels 扫描 OpenAI-compatible 端点的可用模型（用于设置页下拉）。
+func (s *ChatService) ListModels(baseURL, apiKey string) ([]string, error) {
+	if trimSpace(baseURL) == "" {
+		return nil, errors.New("Base URL 不能为空")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	p := llm.NewOpenAICompatible("scan", baseURL, apiKey)
+	return p.ListModels(ctx)
+}
+
 // SendMessage 把用户消息追加到会话并异步流式请求模型。
+// effort 取值 ""|"low"|"medium"|"high"，作为 reasoning_effort 透传。
 // 返回错误表示同步失败（会话不存在 / 正忙 / 未配置）；流式期间的
 // 增量/结束/错误通过 chat:delta / chat:done / chat:error 事件推送。
-func (s *ChatService) SendMessage(sessionID, text string) error {
+func (s *ChatService) SendMessage(sessionID, text, effort string) error {
+	switch effort {
+	case "", "low", "medium", "high":
+	default:
+		return errors.New("思考深度取值无效（low/medium/high）")
+	}
 	text = trimSpace(text)
 	if text == "" {
 		return errors.New("消息不能为空")
@@ -168,11 +185,11 @@ func (s *ChatService) SendMessage(sessionID, text string) error {
 	s.busy[sessionID] = true
 	s.mu.Unlock()
 
-	go s.runCompletion(sessionID, text)
+	go s.runCompletion(sessionID, text, effort)
 	return nil
 }
 
-func (s *ChatService) runCompletion(sessionID, text string) {
+func (s *ChatService) runCompletion(sessionID, text, effort string) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.busy, sessionID)
@@ -212,7 +229,7 @@ func (s *ChatService) runCompletion(sessionID, text string) {
 	}
 	msgs = append(msgs, chat.Message{Role: chat.RoleUser, Content: text})
 
-	req := llm.ChatRequest{Model: s.settings.ActiveModel}
+	req := llm.ChatRequest{Model: s.settings.ActiveModel, ReasoningEffort: effort}
 	if sp := trimSpace(s.settings.SystemPrompt); sp != "" {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleSystem, Content: sp})
 	}

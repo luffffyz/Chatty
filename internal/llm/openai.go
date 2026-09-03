@@ -79,11 +79,15 @@ func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDe
 	if req.Model == "" {
 		return nil, errors.New("llm: model is required")
 	}
-	payload, err := json.Marshal(map[string]any{
+	body := map[string]any{
 		"model":    req.Model,
 		"messages": req.Messages,
 		"stream":   true,
-	})
+	}
+	if req.ReasoningEffort != "" {
+		body["reasoning_effort"] = req.ReasoningEffort
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("llm: marshal request: %w", err)
 	}
@@ -183,4 +187,46 @@ func (p *OpenAICompatible) errorFromResponse(resp *http.Response) error {
 		msg = resp.Status
 	}
 	return fmt.Errorf("llm: %s: status %d: %s", p.Name(), resp.StatusCode, msg)
+}
+
+// ListModels 查询 OpenAI-compatible 的 GET /models 端点，返回可用模型 id。
+// 便于设置页扫描提供商可用模型。
+func (p *OpenAICompatible) ListModels(ctx context.Context) ([]string, error) {
+	base := p.BaseURL
+	if base == "" {
+		base = "https://api.openai.com/v1"
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("llm: build list request: %w", err)
+	}
+	if p.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
+	resp, err := p.client().Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("llm: list models %q failed: %w", p.Name(), err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, p.errorFromResponse(resp)
+	}
+	var out struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
+		return nil, fmt.Errorf("llm: decode models: %w", err)
+	}
+	ids := make([]string, 0, len(out.Data))
+	for _, m := range out.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, errors.New("llm: endpoint returned no models")
+	}
+	return ids, nil
 }

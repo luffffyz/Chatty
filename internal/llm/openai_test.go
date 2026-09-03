@@ -188,3 +188,38 @@ func TestStreamChat_ForwardsThinking(t *testing.T) {
 		t.Errorf("content = %q res = %q", content, res.Content)
 	}
 }
+
+func TestListModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer sk-x" {
+			t.Errorf("auth = %q", r.Header.Get("Authorization"))
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"deepseek-chat"},{"id":"deepseek-reasoner"}]}`))
+	}))
+	defer srv.Close()
+
+	p := NewOpenAICompatible("test", srv.URL+"/v1", "sk-x")
+	ids, err := p.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "deepseek-chat" || ids[1] != "deepseek-reasoner" {
+		t.Errorf("ids = %#v", ids)
+	}
+}
+
+func TestListModels_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"bad key"}}`))
+	}))
+	defer srv.Close()
+
+	p := NewOpenAICompatible("test", srv.URL+"/v1", "k")
+	if _, err := p.ListModels(context.Background()); err == nil {
+		t.Fatal("want error on 401")
+	}
+}

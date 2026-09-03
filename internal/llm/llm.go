@@ -27,6 +27,9 @@ type Message struct {
 type ChatRequest struct {
 	Model    string    // 模型名，例如 openai/gpt-4o-mini、deepseek-chat
 	Messages []Message // 完整多轮历史
+	// ReasoningEffort 透传给兼容端点的 reasoning_effort（如 OpenAI o 系、
+	// 部分兼容服务）。取值 "low"|"medium"|"high"；空表示不发送该字段。
+	ReasoningEffort string
 }
 
 // ChatResult 描述一次完成的模型回复。

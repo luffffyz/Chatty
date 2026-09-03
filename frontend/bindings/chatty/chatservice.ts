@@ -47,6 +47,13 @@ export function GetSettings(): $CancellablePromise<config$0.Settings | null> {
 }
 
 /**
+ * ListModels 扫描 OpenAI-compatible 端点的可用模型（用于设置页下拉）。
+ */
+export function ListModels(baseURL: string, apiKey: string): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1421602273, baseURL, apiKey);
+}
+
+/**
  * NewSession 新建一个空会话。
  */
 export function NewSession(): $CancellablePromise<$models.SessionDTO | null> {
@@ -62,9 +69,10 @@ export function SaveSettings(st: config$0.Settings | null): $CancellablePromise<
 
 /**
  * SendMessage 把用户消息追加到会话并异步流式请求模型。
+ * effort 取值 ""|"low"|"medium"|"high"，作为 reasoning_effort 透传。
  * 返回错误表示同步失败（会话不存在 / 正忙 / 未配置）；流式期间的
  * 增量/结束/错误通过 chat:delta / chat:done / chat:error 事件推送。
  */
-export function SendMessage(sessionID: string, text: string): $CancellablePromise<void> {
-    return $Call.ByID(1063940756, sessionID, text);
+export function SendMessage(sessionID: string, text: string, effort: string): $CancellablePromise<void> {
+    return $Call.ByID(1063940756, sessionID, text, effort);
 }

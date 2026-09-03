@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import type { Settings } from '../../bindings/chatty/internal/config/models'
+import { ChatService } from '../../bindings/chatty'
 import { useChat } from '../chat'
 
 const emit = defineEmits<{ close: [] }>()
@@ -24,7 +25,34 @@ const pform = reactive({
   apiKey: '',
   model: PRESETS[0].example,
   systemPrompt: '',
+  models: [] as string[],
 })
+
+// ---------- 提供商: 模型扫描 ----------
+const scanning = ref(false)
+const scanMsg = ref('')
+
+async function scanModels() {
+  scanMsg.value = ''
+  if (!pform.baseURL.trim()) {
+    scanMsg.value = '请先填写 Base URL'
+    return
+  }
+  scanning.value = true
+  try {
+    const models = (await ChatService.ListModels(pform.baseURL.trim(), pform.apiKey.trim())) ?? []
+    pform.models = models
+    // 自动选中扫描到的第一个（或与当前输入匹配的）
+    if (!models.includes(pform.model)) {
+      pform.model = models[0] ?? ''
+    }
+    scanMsg.value = `扫描到 ${models.length} 个模型`
+  } catch (e) {
+    scanMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    scanning.value = false
+  }
+}
 
 // ---------- 外观表单 ----------
 const THEMES = [
@@ -62,6 +90,7 @@ function syncFromSettings() {
     pform.apiKey = p.APIKey ?? ''
     pform.model = cur.activeModel || PRESETS[0].example
     pform.systemPrompt = cur.systemPrompt
+    pform.models = p.Models ?? []
   }
   aform.theme = cur.appearance?.theme ?? 'system'
   aform.fontSize = cur.appearance?.fontSize ?? 14
@@ -70,9 +99,15 @@ function syncFromSettings() {
 
 function applyPreset(i: number) {
   const p = PRESETS[i]
-  pform.label = p.label
-  pform.baseURL = p.baseURL
-  if (!pform.model || pform.baseURL !== p.baseURL) pform.model = p.example
+  // 切换到不同提供商预设：清空 API Key / 模型 / 扫描结果，避免串配置
+  if (pform.baseURL !== p.baseURL || pform.label !== p.label) {
+    pform.label = p.label
+    pform.baseURL = p.baseURL
+    pform.apiKey = ''
+    pform.model = ''
+    pform.models = []
+    scanMsg.value = ''
+  }
 }
 
 async function saveProvider() {
@@ -91,6 +126,7 @@ async function saveProvider() {
       Label: pform.label.trim() || 'default',
       BaseURL: pform.baseURL.trim(),
       APIKey: pform.apiKey.trim(),
+      Models: pform.models,
     },
   ]
   await doSave(next)
@@ -178,13 +214,31 @@ onMounted(syncFromSettings)
 
         <label class="field">
           <span>API Key</span>
-          <input v-model="pform.apiKey" type="password" placeholder="sk-…（本地 Ollama 可留空）" />
+          <div class="key-row">
+            <input v-model="pform.apiKey" type="password" placeholder="sk-…（本地 Ollama 可留空）" />
+            <button
+              type="button"
+              class="btn btn--small"
+              :disabled="scanning || !pform.baseURL.trim()"
+              @click="scanModels"
+            >
+              {{ scanning ? '扫描中…' : '扫描模型' }}
+            </button>
+          </div>
         </label>
 
         <label class="field">
           <span>模型</span>
-          <input v-model="pform.model" type="text" placeholder="openai/gpt-4o-mini" />
+          <input v-model="pform.model" list="chatty-model-options" type="text" placeholder="openai/gpt-4o-mini" />
+          <datalist id="chatty-model-options">
+            <option v-for="m in pform.models" :key="m" :value="m"></option>
+          </datalist>
+          <span v-if="pform.models.length" class="hint">可点击输入框从下拉选择，也可手动输入。</span>
         </label>
+
+        <p v-if="scanMsg" class="scan-msg">
+          {{ scanMsg }}
+        </p>
 
         <label class="field">
           <span>系统提示（Typst 输出约定）</span>
@@ -340,6 +394,26 @@ onMounted(syncFromSettings)
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.key-row {
+  display: flex;
+  gap: 8px;
+}
+.key-row input {
+  flex: 1;
+}
+.btn--small {
+  padding: 6px 14px;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.scan-msg {
+  margin: -6px 0 14px;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+.scan-msg--err {
+  color: var(--danger);
 }
 .chip {
   border: 1px solid var(--border-strong);

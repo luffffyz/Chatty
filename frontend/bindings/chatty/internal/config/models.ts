@@ -40,6 +40,11 @@ export interface Provider {
      */
     "BaseURL": string;
     "APIKey": string;
+
+    /**
+     * 扫描得到的可用模型列表（可选）
+     */
+    "Models": string[] | null;
 }
 
 /**

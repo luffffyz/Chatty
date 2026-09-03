@@ -10,6 +10,8 @@ const { state, init, send, selectSession, newSession, deleteSession } = useChat(
 const input = ref('')
 const showSettings = ref(false)
 const bodyEl = ref<HTMLElement | null>(null)
+// 思考深度(reasoning_effort): 空=不发送(low|medium|high)
+const effort = ref<'' | 'low' | 'medium' | 'high'>('')
 
 async function scrollBottom() {
   await nextTick()
@@ -36,7 +38,11 @@ watch(
 function submit() {
   const text = input.value
   input.value = ''
-  send(text)
+  send(text, effort.value)
+}
+
+function pickEffort(v: string) {
+  effort.value = (v as '' | 'low' | 'medium' | 'high')
 }
 
 function onDelete(id: string) {
@@ -96,16 +102,37 @@ function fmtTime(ms: number): string {
       </div>
 
       <footer class="composer">
-        <textarea
-          v-model="input"
-          rows="1"
-          class="composer__input"
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-          @keydown.enter.exact.prevent="submit"
-        ></textarea>
-        <button class="composer__send" :disabled="state.busy || !input.trim()" @click="submit">
-          {{ state.busy ? '…' : '发送' }}
-        </button>
+        <div class="composer__effort" title="思考深度（reasoning_effort，非推理模型忽略）">
+          <span class="composer__effort-label">思考</span>
+          <button
+            v-for="opt in [
+              { v: '', label: '关' },
+              { v: 'low', label: '低' },
+              { v: 'medium', label: '中' },
+              { v: 'high', label: '高' },
+            ]"
+            :key="String(opt.v)"
+            type="button"
+            class="effort-chip"
+            :class="{ 'effort-chip--on': effort === opt.v }"
+            :disabled="state.busy"
+            @click="pickEffort(opt.v)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+        <div class="composer__row">
+          <textarea
+            v-model="input"
+            rows="1"
+            class="composer__input"
+            placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+            @keydown.enter.exact.prevent="submit"
+          ></textarea>
+          <button class="composer__send" :disabled="state.busy || !input.trim()" @click="submit">
+            {{ state.busy ? '…' : '发送' }}
+          </button>
+        </div>
       </footer>
     </main>
 
@@ -252,10 +279,44 @@ function fmtTime(ms: number): string {
 }
 .composer {
   display: flex;
-  gap: 10px;
-  padding: 12px 18px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 18px 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-side);
+}
+.composer__effort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.composer__effort-label {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.effort-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  line-height: 1.6;
+}
+.effort-chip--on {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+.effort-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.composer__row {
+  display: flex;
+  gap: 10px;
   align-items: flex-end;
 }
 .composer__input {
