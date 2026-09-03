@@ -1,52 +1,47 @@
-// 消息内容分块：把回复拆成 普通文本 / ```typst / ```mermaid / ```其他代码。
-//
-// 模型被 system prompt 约定使用围栏标记排版与图：
-//  ```typst
-//  #set page(...)
-//  $x^2$
-//  ```
-//  ```mermaid
-//  flowchart LR
-//  ...
-//  ```
+// 消息内容按“整条 = Typst 文档”切分：
+//  - ```mermaid 围栏内的源码被抽出单独渲染成图；
+//  - 其余全部内容原样作为 Typst 源码（typst 语言中 ``` 块即 raw 代码
+//    块，模型可用它展示代码；若出现 ```typst 围栏也兼容抽取其内容）。
 
-export type BlockKind = 'text' | 'typst' | 'mermaid' | 'code'
-
-export interface Block {
-  kind: BlockKind
-  content: string
+export interface TypstSegments {
+  /** 拼好的 Typst 源码主体 */
+  typst: string
+  /** 各 mermaid 图源码（按出现顺序） */
+  diagrams: string[]
 }
 
 const FENCE_RE = /```([^\n`]*)\n([\s\S]*?)(?:```|$)/g
 
-export function splitBlocks(src: string): Block[] {
-  const blocks: Block[] = []
+export function splitTypstMessage(src: string): TypstSegments {
+  const parts: string[] = []
+  const diagrams: string[] = []
   let cursor = 0
-  let match: RegExpExecArray | null
 
   FENCE_RE.lastIndex = 0
+  let match: RegExpExecArray | null
   while ((match = FENCE_RE.exec(src)) !== null) {
-    if (match.index > cursor) {
-      pushText(blocks, src.slice(cursor, match.index))
-    }
     const lang = (match[1] || '').trim().toLowerCase()
     const body = match[2]
-    if (lang === 'typst') {
-      blocks.push({ kind: 'typst', content: body })
-    } else if (lang === 'mermaid') {
-      blocks.push({ kind: 'mermaid', content: body })
-    } else {
-      blocks.push({ kind: 'code', content: body })
-    }
-    cursor = match.index + match[0].length
-  }
-  if (cursor < src.length) {
-    pushText(blocks, src.slice(cursor))
-  }
-  return blocks
-}
 
-function pushText(blocks: Block[], text: string) {
-  const t = text.trim()
-  if (t !== '') blocks.push({ kind: 'text', content: text })
+    if (lang === 'mermaid') {
+      parts.push(src.slice(cursor, match.index))
+      diagrams.push(body)
+      cursor = match.index + match[0].length
+      continue
+    }
+    if (lang === 'typst') {
+      // 兼容旧版 prompt 的 ```typst 围栏：围栏内容直接进入排版主体
+      parts.push(src.slice(cursor, match.index))
+      parts.push('\n\n')
+      parts.push(body)
+      cursor = match.index + match[0].length
+      continue
+    }
+    // 其它 ``` 块保留原文 —— typst 视其为 raw 代码块
+  }
+
+  if (cursor < src.length) {
+    parts.push(src.slice(cursor))
+  }
+  return { typst: parts.join(''), diagrams }
 }

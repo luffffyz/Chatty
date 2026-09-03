@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,6 +71,26 @@ func TestLoadCorruptFile(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("expected error for corrupt settings file")
+	}
+}
+
+func TestLegacyPromptMigratedOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-prompt.json")
+	in := Default()
+	in.SystemPrompt = legacyDefaultPrompt
+	raw, _ := json.Marshal(in)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out.SystemPrompt != defaultSystemPrompt() {
+		t.Error("legacy default prompt should be migrated to the new default")
+	}
+	if strings.Contains(out.SystemPrompt, "围栏内，写完整 Typst") {
+		t.Errorf("still contains legacy wording")
 	}
 }
 

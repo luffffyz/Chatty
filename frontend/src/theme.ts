@@ -1,8 +1,19 @@
 // 主题与字号应用层：依据 config.Settings.Appearance 设置
-// <html data-theme> 与 --fs-* 字号刻度。
+// <html data-theme> 与 --fs-* 字号刻度；同时维护响应式 view，
+// 供 Typst 渲染等需要感知主题/字号的组件订阅。
+import { reactive } from 'vue'
 import type { Appearance } from '../bindings/chatty/internal/config/models'
 
 export type ResolvedTheme = 'light' | 'dark'
+
+/** 当前已解析的主题与基础字号（Typst 渲染依赖）。 */
+export const view = reactive<{ theme: ResolvedTheme; fontSize: number }>({
+  theme: 'light',
+  fontSize: 14,
+})
+
+/** 主题正文色（给 Typst #set text(fill: ...) 用）。 */
+export const textHex = (): string => (view.theme === 'dark' ? '#e6e8ec' : '#1f2328')
 
 const mql = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -30,15 +41,19 @@ function applyFontScale(base: number) {
 export function applyAppearance(app?: Appearance | null): void {
   const base = app && app.fontSize > 0 ? app.fontSize : 14
   applyFontScale(base)
+  view.fontSize = base
 
   const target: ResolvedTheme = resolve(app?.theme, mql.matches)
+  view.theme = target
   document.documentElement.dataset.theme = target
 
   // system 模式下监听系统切换；非 system 时移除监听
   const shouldWatch = app?.theme === 'system'
   if (shouldWatch && !systemListener) {
     systemListener = () => {
-      document.documentElement.dataset.theme = resolve('system', mql.matches)
+      const t = resolve('system', mql.matches)
+      view.theme = t
+      document.documentElement.dataset.theme = t
     }
     mql.addEventListener('change', systemListener)
   } else if (!shouldWatch && systemListener) {
