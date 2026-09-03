@@ -32,6 +32,7 @@ type Settings struct {
 type Appearance struct {
 	Theme    string `json:"theme"`    // light | dark | system
 	FontSize int    `json:"fontSize"` // 基础字号 px（0 表示默认 14）
+	ChartBg  string `json:"chartBg"`  // 暗色主题下 mermaid 图背景色(hex)，空=默认
 }
 
 // Theme 取值。

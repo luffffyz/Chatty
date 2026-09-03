@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { renderMermaid } from '../lib/mermaid'
+import { DEFAULT_CHART_BG, view } from '../theme'
 
 const props = defineProps<{ source: string }>()
 
@@ -9,7 +10,7 @@ const error = ref('')
 const pending = ref(false)
 
 async function render() {
-  if (svg.value || pending.value) return
+  if (pending.value) return
   pending.value = true
   error.value = ''
   try {
@@ -21,8 +22,28 @@ async function render() {
   }
 }
 
+function rerenderOnThemeChange() {
+  // 主题/配色变化：清掉旧图重新渲染
+  if (svg.value || error.value) {
+    svg.value = ''
+    error.value = ''
+    render()
+  }
+}
+
 onMounted(render)
-watch(() => props.source, render)
+watch(() => props.source, () => {
+  svg.value = ''
+  error.value = ''
+  render()
+})
+watch(() => [view.theme, view.chartBg], rerenderOnThemeChange)
+
+// 暗色：整卡背景与节点同色，靠白描边区分图形
+const containerStyle = computed(() => {
+  if (view.theme !== 'dark') return {}
+  return { background: view.chartBg || DEFAULT_CHART_BG, borderColor: 'transparent' }
+})
 </script>
 
 <template>
@@ -32,7 +53,7 @@ watch(() => props.source, render)
       <div class="mermaid-block__error-msg">Mermaid 渲染失败：{{ error }}</div>
       <pre class="mermaid-block__raw">{{ source }}</pre>
     </div>
-    <div v-else v-html="svg" class="mermaid-block__svg"></div>
+    <div v-else v-html="svg" class="mermaid-block__svg" :style="containerStyle"></div>
   </div>
 </template>
 

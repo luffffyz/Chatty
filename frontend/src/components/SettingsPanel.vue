@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import type { Settings } from '../../bindings/chatty/internal/config/models'
 import { useChat } from '../chat'
+import { CHART_BG_COLORS } from '../theme'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -34,7 +35,7 @@ const THEMES = [
 ]
 const MIN_SIZE = 12
 const MAX_SIZE = 22
-const aform = reactive({ theme: 'system', fontSize: 14 })
+const aform = reactive({ theme: 'system', fontSize: 14, chartBg: '' })
 
 function cloneBase(): Settings {
   const cur = state.settings
@@ -46,6 +47,7 @@ function cloneBase(): Settings {
     appearance: {
       theme: cur?.appearance?.theme ?? 'system',
       fontSize: cur?.appearance?.fontSize ?? 14,
+      chartBg: cur?.appearance?.chartBg ?? '',
     },
   }
 }
@@ -64,6 +66,7 @@ function syncFromSettings() {
   }
   aform.theme = cur.appearance?.theme ?? 'system'
   aform.fontSize = cur.appearance?.fontSize ?? 14
+  aform.chartBg = cur.appearance?.chartBg ?? ''
 }
 
 function applyPreset(i: number) {
@@ -97,13 +100,14 @@ async function saveProvider() {
 async function saveAppearance() {
   errMsg.value = ''
   const next = cloneBase()
-  next.appearance = { theme: aform.theme, fontSize: aform.fontSize }
+  next.appearance = { theme: aform.theme, fontSize: aform.fontSize, chartBg: aform.chartBg }
   await doSave(next)
 }
 
 function resetAppearance() {
   aform.theme = 'system'
   aform.fontSize = 14
+  aform.chartBg = ''
   saveAppearance()
 }
 
@@ -232,6 +236,33 @@ onMounted(syncFromSettings)
             />
             <span class="size-tip">{{ MIN_SIZE }}px — {{ MAX_SIZE }}px</span>
           </div>
+        </label>
+
+        <label class="field">
+          <span>图表配色（暗色主题生效）</span>
+          <div class="charts">
+            <button
+              type="button"
+              class="swatch"
+              :class="{ 'swatch--on': aform.chartBg === '' }"
+              title="跟随默认"
+              @click="aform.chartBg = ''"
+            >
+              <span class="swatch__dot swatch__dot--auto">A</span>
+            </button>
+            <button
+              v-for="c in CHART_BG_COLORS"
+              :key="c"
+              type="button"
+              class="swatch"
+              :class="{ 'swatch--on': aform.chartBg === c }"
+              :title="c"
+              @click="aform.chartBg = c"
+            >
+              <span class="swatch__dot" :style="{ background: c }"></span>
+            </button>
+          </div>
+          <p class="hint">仅影响暗色主题下的 mermaid 图背景（白字、白边框）。</p>
         </label>
 
         <div class="row">
@@ -406,6 +437,37 @@ onMounted(syncFromSettings)
   margin-top: 18px;
   display: flex;
   justify-content: flex-end;
+}
+.charts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 3px;
+  cursor: pointer;
+  line-height: 0;
+}
+.swatch--on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.swatch__dot {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+}
+.swatch__dot--auto {
+  background: conic-gradient(#6e2b2b, #75561c, #46692b, #254d59, #403159, #593148, #6e2b2b);
+  color: #fff;
+  font-size: 11px;
+  line-height: 22px;
+  text-align: center;
+  font-weight: 700;
 }
 .btn {
   padding: 8px 22px;

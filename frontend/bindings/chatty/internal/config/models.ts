@@ -14,6 +14,11 @@ export interface Appearance {
      * 基础字号 px（0 表示默认 14）
      */
     "fontSize": number;
+
+    /**
+     * 暗色主题下 mermaid 图背景色(hex)，空=默认
+     */
+    "chartBg": string;
 }
 
 /**
