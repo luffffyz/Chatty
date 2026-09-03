@@ -1,36 +1,28 @@
 <script setup lang="ts">
 // 整条 assistant 消息的 Typst 渲染：
-// 把消息内容当作一份连续排版的 Typst 文档编译，输出透明底、随容器宽度
-// 换行的 SVG，文字颜色/字号跟随当前主题与字号设置。
+// 排版宽度 = 主窗口去掉侧栏后的比例（固定来源，避免容器测量反馈环），
+// 文字颜色/字号跟随当前主题与字号设置，窗口/主题/字号变化时重编译。
 // 编译失败时回退为原文，保证内容可读。
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { renderTypst } from '../lib/typst'
 import { textHex, view } from '../theme'
 
 const props = defineProps<{ source: string }>()
 
-const host = ref<HTMLElement | null>(null)
-const widthPx = ref(0)
 const svg = ref('')
 const pending = ref(false)
 const error = ref('')
+/** 当前编译宽度对应的显示像素宽（pt×4/3，保证 1pt→1px 的字号观感） */
+const displayW = ref(0)
 
-let ro: ResizeObserver | null = null
 let timer: number | undefined
 
 // 侧栏固定宽度；消息排版宽 = 主窗口去掉侧栏后按比例取整。
 const SIDEBAR_PX = 240
 const MSG_RATIO = 0.9
 
-function windowMsgWidth(): number {
+function msgWidthPx(): number {
   return Math.max(320, Math.floor((window.innerWidth - SIDEBAR_PX) * MSG_RATIO))
-}
-
-function measure() {
-  // 宿主已布局且宽度合理时用之（贴合气泡），否则按主窗口比例，
-  // 避免挂载初期 clientWidth=0 导致排版过窄。
-  const hostW = host.value?.clientWidth || host.value?.parentElement?.clientWidth || 0
-  widthPx.value = hostW > 60 ? hostW : windowMsgWidth()
 }
 
 function scheduleCompile() {
@@ -38,17 +30,11 @@ function scheduleCompile() {
   timer = window.setTimeout(() => void compile(), 90)
 }
 
-function onWindowResize() {
-  // 窗口变化时宽度跟随窗口比例重排
-  measure()
-  scheduleCompile()
-}
-
 async function compile() {
-  measure()
   pending.value = true
   error.value = ''
-  const widthPt = Math.round((widthPx.value * 0.75) / 4) * 4 // px→pt，取整到 4pt 网格
+  const widthPt = Math.round((msgWidthPx() * 0.75) / 4) * 4 // px→pt，取整到 4pt 网格
+  displayW.value = Math.round(widthPt * (4 / 3))
   const sizePt = Math.max(8, view.fontSize * 0.75).toFixed(2)
   // wrapper 前置；提示词已要求模型不要写 #set page/text/import。
   const wrapped =
@@ -68,13 +54,13 @@ async function compile() {
   }
 }
 
-onMounted(async () => {
-  measure()
-  ro = new ResizeObserver(() => scheduleCompile())
-  if (host.value) ro.observe(host.value)
-  window.addEventListener('resize', onWindowResize)
-  await nextTick()
+function onWindowResize() {
+  scheduleCompile()
+}
+
+onMounted(() => {
   compile()
+  window.addEventListener('resize', onWindowResize)
 })
 
 watch(
@@ -89,15 +75,14 @@ watch(() => view.theme, scheduleCompile)
 
 onBeforeUnmount(() => {
   clearTimeout(timer)
-  ro?.disconnect()
   window.removeEventListener('resize', onWindowResize)
 })
 </script>
 
 <template>
-  <div ref="host" class="doc">
+  <div class="doc">
     <!-- 渲染成功 -->
-    <div v-if="svg" class="doc__svg" v-html="svg"></div>
+    <div v-if="svg" class="doc__svg" :style="{ '--tsw': displayW + 'px' }" v-html="svg"></div>
     <!-- 编译中 -->
     <div v-else-if="pending" class="doc__pending">排版中…</div>
     <!-- 任何失败/异常状态都回退原文，绝不出现空泡 -->
@@ -123,8 +108,11 @@ onBeforeUnmount(() => {
   overflow-y: hidden;
 }
 .doc__svg :deep(svg) {
+  /* 固定宽度（--tsw = 编译时窗口比例宽 pt×4/3 px）。不拉伸、不回读父级宽度，
+     从根上消除“气泡(flex 内容定宽) ↔ 排版宽度”的反馈循环 */
   display: block;
-  width: 100%;
+  width: var(--tsw);
+  max-width: 100%;
   height: auto;
   overflow: visible;
 }
