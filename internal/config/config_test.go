@@ -94,6 +94,26 @@ func TestLegacyPromptMigratedOnLoad(t *testing.T) {
 	}
 }
 
+func TestFlowPromptMigratedOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flow-prompt.json")
+	in := Default()
+	in.SystemPrompt = flowDefaultPrompt
+	raw, _ := json.Marshal(in)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out.SystemPrompt != defaultSystemPrompt() {
+		t.Error("flow default prompt should be migrated to the latest default")
+	}
+	if !strings.Contains(out.SystemPrompt, ">=") {
+		t.Errorf("new prompt should teach typst >= symbol")
+	}
+}
+
 func containsFold(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if equalFoldASCII(s[i:i+len(sub)], sub) {
