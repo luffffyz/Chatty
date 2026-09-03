@@ -33,6 +33,7 @@ const FONT_NAMES: string[] = [
   // 微软雅黑（本机复制，见 scripts/fetch-system-fonts.ps1；可能缺失，加载会告警跳过）
   'msyh.ttc',
   'msyhbd.ttc',
+  'wqy-zenhei.ttf', // 文泉驿正黑(开源 OFL)，思源宋替换，体积 -36MB
   'NewCM10-Bold.otf',
   'NewCM10-BoldItalic.otf',
   'NewCM10-Italic.otf',
@@ -41,8 +42,6 @@ const FONT_NAMES: string[] = [
   'NewCMMath-Book.otf',
   'NewCMMath-Regular.otf',
   'NotoColorEmoji-Regular-COLR.subset.ttf',
-  'NotoSerifCJKsc-Bold.otf',
-  'NotoSerifCJKsc-Regular.otf',
   'Roboto-Regular.ttf',
   'TwitterColorEmoji.ttf',
 ]
