@@ -8,7 +8,7 @@
 //
 // $typst 是共享单例，编译过程会改动其内部状态，因此并发渲染必须
 // 串行化——用一个 promise 链排队，单条失败不阻塞后续。
-import { $typst } from '@myriaddreamin/typst.ts'
+import { $typst, loadFonts } from '@myriaddreamin/typst.ts'
 import compilerWasmUrl from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url'
 import rendererWasmUrl from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer_bg.wasm?url'
 
@@ -18,6 +18,18 @@ async function ensureConfigured(): Promise<void> {
   if (configured) return
   $typst.setCompilerInitOptions({ getModule: () => compilerWasmUrl })
   $typst.setRendererInitOptions({ getModule: () => rendererWasmUrl })
+  // 字体全部本地化：public/fonts 下的 typst-assets 字体集，
+  // 不依赖 jsdelivr CDN。assetUrlPrefix 为字符串时用于全部资产。
+  $typst.use({
+    key: 'chatty-local-fonts',
+    forRoles: ['compiler', 'renderer'],
+    provides: [
+      loadFonts([], {
+        assets: ['text', 'cjk', 'emoji'],
+        assetUrlPrefix: '/fonts/',
+      }),
+    ],
+  })
   configured = true
 }
 

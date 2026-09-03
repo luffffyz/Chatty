@@ -58,24 +58,21 @@ const renderedContent = computed(() => props.content)
 .msg--assistant {
   justify-content: flex-start;
 }
+.msg--user .msg__bubble {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+}
 .msg__bubble {
-  max-width: 86%;
-  border-radius: 12px;
-  padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #e6e6e6;
+  background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-.msg--user .msg__bubble {
-  background: #eef4ff;
-  border-color: #d6e4ff;
-}
 .msg__bubble--failed {
-  border-color: #ffd1cc;
+  border-color: var(--danger);
 }
 .msg__failed {
-  color: #b42318;
-  font-size: 13px;
+  color: var(--danger);
+  font-size: var(--fs-sm);
   margin: 0 0 4px;
 }
 .msg__text {
@@ -83,7 +80,7 @@ const renderedContent = computed(() => props.content)
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
-  color: #1f2328;
+  color: var(--text);
 }
 .msg__stream {
   margin: 0;
@@ -92,11 +89,11 @@ const renderedContent = computed(() => props.content)
   line-height: 1.6;
   font-family: inherit;
   font-size: inherit;
-  color: #1f2328;
+  color: var(--text);
 }
 .msg__cursor {
   animation: blink 1s step-end infinite;
-  color: #4a7dff;
+  color: var(--accent);
 }
 @keyframes blink {
   50% {
@@ -105,14 +102,14 @@ const renderedContent = computed(() => props.content)
 }
 .msg__code {
   margin: 6px 0 0;
-  background: #f6f8fa;
+  background: var(--code-bg);
   border-radius: 6px;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #24292f;
+  color: var(--text);
 }
 </style>

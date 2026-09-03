@@ -25,7 +25,24 @@ type Settings struct {
 	ActiveProviderID string     `json:"activeProviderId"`
 	ActiveModel      string     `json:"activeModel"`
 	SystemPrompt     string     `json:"systemPrompt"`
+	Appearance       Appearance `json:"appearance"`
 }
+
+// Appearance 是界面外观设置。
+type Appearance struct {
+	Theme    string `json:"theme"`    // light | dark | system
+	FontSize int    `json:"fontSize"` // 基础字号 px（0 表示默认 14）
+}
+
+// Theme 取值。
+const (
+	ThemeLight  = "light"
+	ThemeDark   = "dark"
+	ThemeSystem = "system"
+)
+
+// DefaultFontSize 是界面默认基础字号。
+const DefaultFontSize = 14
 
 // Default 返回出厂设置：无 provider、带默认系统提示（Typst 输出约定）。
 func Default() *Settings {
@@ -41,6 +58,10 @@ func Default() *Settings {
 		"- 默认使用简体中文回复。"
 	return &Settings{
 		SystemPrompt: strings.TrimSpace(prompt),
+		Appearance: Appearance{
+			Theme:    ThemeSystem,
+			FontSize: DefaultFontSize,
+		},
 	}
 }
 
@@ -57,7 +78,18 @@ func Load(path string) (*Settings, error) {
 	if err := json.Unmarshal(raw, s); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
+	ensureDefaults(s)
 	return s, nil
+}
+
+// ensureDefaults 补齐旧版配置缺少的字段（兼容升级）。
+func ensureDefaults(s *Settings) {
+	if s.Appearance.Theme != ThemeLight && s.Appearance.Theme != ThemeDark {
+		s.Appearance.Theme = ThemeSystem
+	}
+	if s.Appearance.FontSize <= 0 {
+		s.Appearance.FontSize = DefaultFontSize
+	}
 }
 
 // Save 把设置写入 path（自动创建父目录）。

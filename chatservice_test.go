@@ -201,8 +201,15 @@ func TestSendMessageConcurrentSendRejected(t *testing.T) {
 func TestSaveSettingsValidation(t *testing.T) {
 	svc, _, _, st := newTestService(t)
 	_ = st
-	if err := svc.SaveSettings(config.Default()); err == nil {
-		t.Error("empty providers should be rejected")
+	// 空 providers 且未选 active → 允许（外观页先行保存场景）
+	if err := svc.SaveSettings(config.Default()); err != nil {
+		t.Errorf("empty providers with no active selection should pass: %v", err)
+	}
+	// active 指向不存在的 provider → 拒绝
+	bad := config.Default()
+	bad.ActiveProviderID = "ghost"
+	if err := svc.SaveSettings(bad); err == nil {
+		t.Error("dangling activeProviderId should be rejected")
 	}
 	good := config.Default()
 	good.Providers = []config.Provider{{ID: "p", BaseURL: "http://x/v1"}}

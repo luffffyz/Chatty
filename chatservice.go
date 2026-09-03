@@ -247,20 +247,21 @@ func (s *ChatService) activeProvider() *config.Provider {
 }
 
 func validateSettings(st *config.Settings) error {
-	if len(st.Providers) == 0 {
-		return errors.New("至少需要一个 provider")
-	}
-	found := false
-	for _, p := range st.Providers {
-		if trimSpace(p.ID) == "" || trimSpace(p.BaseURL) == "" {
-			return fmt.Errorf("provider %q 缺少 id 或 baseURL", p.Label)
+	// providers 允许为空：外观等设置允许在配置 provider 之前保存；
+	// 仅当声明了 activeProviderId 时要求其指向已配置的 provider。
+	if st.ActiveProviderID != "" {
+		found := false
+		for _, p := range st.Providers {
+			if trimSpace(p.ID) == "" || trimSpace(p.BaseURL) == "" {
+				return fmt.Errorf("provider %q 缺少 id 或 baseURL", p.Label)
+			}
+			if p.ID == st.ActiveProviderID {
+				found = true
+			}
 		}
-		if p.ID == st.ActiveProviderID {
-			found = true
+		if !found {
+			return errors.New("activeProviderId 未指向任何已配置 provider")
 		}
-	}
-	if !found {
-		return errors.New("activeProviderId 未指向任何已配置 provider")
 	}
 	return nil
 }

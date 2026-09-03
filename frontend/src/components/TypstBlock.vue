@@ -42,7 +42,8 @@ watch(() => props.source, compile)
 }
 .typst-block__svg {
   display: inline-block;
-  background: white;
+  background: var(--paper);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 10px;
   line-height: 0;
@@ -52,22 +53,22 @@ watch(() => props.source, compile)
   height: auto;
 }
 .typst-block__status {
-  color: #888;
-  font-size: 12px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
   padding: 4px 0;
 }
 .typst-block__error {
-  color: #b42318;
+  color: var(--danger);
 }
 .typst-block__error-msg {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   margin-bottom: 4px;
 }
 .typst-block__raw {
-  background: #fdf2f2;
+  background: var(--danger-bg);
   border-radius: 6px;
   padding: 8px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   white-space: pre-wrap;
   margin: 0;
 }

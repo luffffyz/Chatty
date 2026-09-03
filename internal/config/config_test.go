@@ -17,6 +17,25 @@ func TestLoadMissingReturnsDefault(t *testing.T) {
 	if !containsFold(s.SystemPrompt, "typst") {
 		t.Errorf("default system prompt should mention typst")
 	}
+	if s.Appearance.Theme != ThemeSystem || s.Appearance.FontSize != DefaultFontSize {
+		t.Errorf("default appearance = %+v", s.Appearance)
+	}
+}
+
+func TestLoadLegacyFileGetsAppearanceDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.json")
+	// 旧版设置没有 appearance 字段
+	raw := `{"providers":[],"activeProviderId":"","activeModel":"","systemPrompt":""}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Appearance.Theme != ThemeSystem || s.Appearance.FontSize != DefaultFontSize {
+		t.Errorf("legacy upgrade appearance = %+v", s.Appearance)
+	}
 }
 
 func TestSaveLoadRoundTrip(t *testing.T) {

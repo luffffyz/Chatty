@@ -3,6 +3,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import MessageBubble from './components/MessageBubble.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import { useChat } from './chat'
+import { applyAppearance } from './theme'
 
 const { state, init, send, selectSession, newSession, deleteSession } = useChat()
 
@@ -19,6 +20,13 @@ onMounted(async () => {
   await init()
   scrollBottom()
 })
+
+// 外观(主题/字号)应用：启动后 settings 载入即生效，保存后立即生效
+watch(
+  () => state.settings?.appearance,
+  (a) => applyAppearance(a),
+  { immediate: true },
+)
 
 watch(
   () => state.messages.map((m) => m.content + m.streaming).join('|'),
@@ -116,8 +124,8 @@ function fmtTime(ms: number): string {
 .side {
   width: 240px;
   flex-shrink: 0;
-  background: #f4f5f7;
-  border-right: 1px solid #e8e8e8;
+  background: var(--bg-side);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
@@ -129,16 +137,18 @@ function fmtTime(ms: number): string {
 }
 .side__title {
   font-weight: 700;
-  font-size: 16px;
+  font-size: var(--fs-lg);
+  color: var(--text);
 }
 .side__new {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px solid #d5d9e0;
-  background: #fff;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--fs-lg);
   line-height: 1;
 }
 .side__list {
@@ -161,28 +171,28 @@ function fmtTime(ms: number): string {
   gap: 2px;
 }
 .item:hover {
-  background: #eaecef;
+  background: var(--surface-hover);
 }
 .item--on {
-  background: #e2e9ff;
+  background: var(--accent-weak);
 }
 .item__title {
-  font-size: 13px;
-  color: #222;
+  font-size: var(--fs-sm);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-right: 20px;
 }
 .item__meta {
-  font-size: 11px;
-  color: #999;
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
 }
 .item__del {
   position: absolute;
   right: 8px;
   top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   opacity: 0;
 }
 .item:hover .item__del {
@@ -194,29 +204,31 @@ function fmtTime(ms: number): string {
 .side__settings {
   width: 100%;
   padding: 8px;
-  border: 1px solid #ddd;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
   position: relative;
+  background: var(--bg);
 }
 .banner {
   position: absolute;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  background: #fff3cd;
-  color: #7a5b00;
-  border: 1px solid #ffe08a;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  border: 1px solid var(--warn-border);
   border-radius: 8px;
   padding: 6px 14px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   z-index: 10;
   max-width: 70%;
 }
@@ -228,43 +240,47 @@ function fmtTime(ms: number): string {
 .empty {
   text-align: center;
   margin-top: 18vh;
-  color: #aaa;
+  color: var(--text-faint);
 }
 .empty__big {
-  font-size: 20px;
+  font-size: var(--fs-xl);
   margin-bottom: 6px;
 }
 .empty__small {
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .composer {
   display: flex;
   gap: 10px;
   padding: 12px 18px;
-  border-top: 1px solid #eee;
-  background: #fafafa;
+  border-top: 1px solid var(--border);
+  background: var(--bg-side);
   align-items: flex-end;
 }
 .composer__input {
   flex: 1;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid #ddd;
-  font-size: 14px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-md);
   font-family: inherit;
   resize: none;
   max-height: 160px;
   min-height: 40px;
   box-sizing: border-box;
 }
+.composer__input::placeholder {
+  color: var(--text-faint);
+}
 .composer__send {
   height: 40px;
   padding: 0 20px;
   border: none;
   border-radius: 10px;
-  background: #4a7dff;
-  color: #fff;
-  font-size: 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-md);
   cursor: pointer;
 }
 .composer__send:disabled {
