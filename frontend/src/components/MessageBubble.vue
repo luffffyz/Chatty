@@ -27,10 +27,16 @@ const seg = computed(() =>
         <pre class="msg__plain">{{ content }}</pre>
       </template>
 
-      <!-- 流式中/出错：显示原文 -->
+      <!-- 流式中/出错 -->
       <template v-else-if="!seg">
-        <pre class="msg__plain"><span>{{ content }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
-        <p v-if="failed && !content" class="msg__failed">请求失败，请检查设置或网络。</p>
+        <div v-if="streaming && !content" class="msg__thinking" aria-label="思考中">
+          <span class="msg__thinking-label">思考中</span>
+          <span class="msg__dots"><i></i><i></i><i></i></span>
+        </div>
+        <template v-else>
+          <pre class="msg__plain"><span>{{ content }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
+          <p v-if="failed && !content" class="msg__failed">请求失败，请检查设置或网络。</p>
+        </template>
       </template>
 
       <!-- 完整消息：Typst 排版主体 + mermaid 图 -->
@@ -79,6 +85,41 @@ const seg = computed(() =>
   font-family: inherit;
   font-size: inherit;
   color: var(--text);
+}
+.msg__thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  padding: 4px 0;
+}
+.msg__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.msg__dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: msg-blink 1.2s infinite ease-in-out;
+}
+.msg__dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.msg__dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes msg-blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
 }
 .msg__cursor {
   animation: blink 1s step-end infinite;
