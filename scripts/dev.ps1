@@ -1,18 +1,19 @@
-# Chatty 开发启动器（Windows）
-# Wails v3 的 dev 模式需要前端 vite dev server 先就绪(端口 9245)。
-# 本脚本: 启动 vite → 等待就绪 → 运行 wails3 dev(前台) → 退出时清理 vite。
-# 用法: powershell -ExecutionPolicy Bypass -File scripts/dev.ps1
+# Chatty dev launcher (Windows)
+# Wails v3 dev mode requires the frontend vite dev server to be ready first
+# (port 9245). This script starts vite, waits for the port, runs 'wails3 dev'
+# in the foreground, then cleans up vite on exit.
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/dev.ps1
 $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path $PSScriptRoot -Parent
 $frontend = Join-Path $repo 'frontend'
 
-# 1) 启动 vite dev server(9245)
+# 1) start vite dev server (9245)
 $vite = Start-Process -FilePath 'npm.cmd' -ArgumentList 'run', 'dev', '--', '--port', '9245', '--strictPort' `
   -WorkingDirectory $frontend -WindowStyle Hidden -PassThru
-Write-Host 'vite dev server 启动中(localhost:9245)...'
+Write-Host 'starting vite dev server (localhost:9245)...'
 
-# 2) 等待端口就绪(最多 30s)
+# 2) wait until the port is listening (up to 30s)
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
   Start-Sleep -Milliseconds 500
@@ -24,11 +25,11 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 if (-not $ready) {
   Stop-Process -Id $vite.Id -Force -ErrorAction SilentlyContinue
-  throw 'vite 未能启动(端口 9245 未就绪)。请检查 frontend/npm run dev 是否报错。'
+  throw 'vite failed to start (port 9245 not listening). Check frontend: npm run dev.'
 }
-Write-Host 'vite 就绪。启动 wails3 dev(退出按 Ctrl+C)...'
+Write-Host 'vite ready. running wails3 dev (press Ctrl+C to exit)...'
 
-# 3) 前台运行 wails3 dev
+# 3) run wails3 dev in the foreground
 try {
   Push-Location $repo
   & wails3 dev
