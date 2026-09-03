@@ -19,7 +19,12 @@ let ro: ResizeObserver | null = null
 let timer: number | undefined
 
 function measure() {
-  if (host.value) widthPx.value = Math.floor(host.value.clientWidth)
+  // 优先宿主宽度；布局未就绪时回退父级/窗口宽度，避免编译被跳过。
+  const w =
+    host.value?.clientWidth ??
+    host.value?.parentElement?.clientWidth ??
+    Math.floor(window.innerWidth * 0.85)
+  widthPx.value = Math.max(120, Math.floor(w))
 }
 
 function scheduleCompile() {
@@ -29,11 +34,9 @@ function scheduleCompile() {
 
 async function compile() {
   measure()
-  const w = widthPx.value
-  if (w < 80) return // 布局未就绪，等 ResizeObserver
   pending.value = true
   error.value = ''
-  const widthPt = Math.round((w * 0.75) / 4) * 4 // px→pt，取整到 4pt 网格
+  const widthPt = Math.round((widthPx.value * 0.75) / 4) * 4 // px→pt，取整到 4pt 网格
   const sizePt = Math.max(8, view.fontSize * 0.75).toFixed(2)
   // wrapper 前置；提示词已要求模型不要写 #set page/text/import。
   const wrapped =
@@ -42,9 +45,12 @@ async function compile() {
     `#set par(leading: 1.05em)\n\n` +
     props.source
   try {
-    svg.value = await renderTypst(wrapped)
+    const out = await renderTypst(wrapped)
+    svg.value = out && out.length > 0 ? out : ''
+    if (!svg.value) error.value = '编译器未返回 SVG'
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
+    console.error('[TypstDoc] compile failed:', error.value)
   } finally {
     pending.value = false
   }
@@ -76,12 +82,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="host" class="doc">
-    <div v-if="pending && !svg" class="doc__pending">排版中…</div>
-    <div v-else-if="error" class="doc__fallback">
+    <!-- 渲染成功 -->
+    <div v-if="svg" class="doc__svg" v-html="svg"></div>
+    <!-- 编译中 -->
+    <div v-else-if="pending" class="doc__pending">排版中…</div>
+    <!-- 任何失败/异常状态都回退原文，绝不出现空泡 -->
+    <div v-else class="doc__fallback">
       <pre class="doc__raw">{{ source }}</pre>
-      <p class="doc__err">⚠ Typst 编译失败，已显示原文</p>
+      <p v-if="error" class="doc__err">⚠ Typst 渲染失败：{{ error }}</p>
     </div>
-    <div v-else-if="svg" class="doc__svg" v-html="svg"></div>
   </div>
 </template>
 
