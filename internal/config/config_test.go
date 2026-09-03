@@ -114,6 +114,26 @@ func TestFlowPromptMigratedOnLoad(t *testing.T) {
 	}
 }
 
+func TestPromptV4MigratedOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v4-prompt.json")
+	in := Default()
+	in.SystemPrompt = promptV4Raw
+	raw, _ := json.Marshal(in)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out.SystemPrompt != defaultSystemPrompt() {
+		t.Error("v4 default prompt should be migrated to v5")
+	}
+	if !strings.Contains(out.SystemPrompt, "6e2b2b") {
+		t.Errorf("v5 prompt should mention mermaid palette")
+	}
+}
+
 func containsFold(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if equalFoldASCII(s[i:i+len(sub)], sub) {

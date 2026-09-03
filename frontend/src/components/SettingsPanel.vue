@@ -2,7 +2,6 @@
 import { onMounted, reactive, ref } from 'vue'
 import type { Settings } from '../../bindings/chatty/internal/config/models'
 import { useChat } from '../chat'
-import { CHART_BG_COLORS } from '../theme'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -236,33 +235,6 @@ onMounted(syncFromSettings)
             />
             <span class="size-tip">{{ MIN_SIZE }}px — {{ MAX_SIZE }}px</span>
           </div>
-        </label>
-
-        <label class="field">
-          <span>图表配色（暗色主题生效）</span>
-          <div class="charts">
-            <button
-              type="button"
-              class="swatch"
-              :class="{ 'swatch--on': aform.chartBg === '' }"
-              title="跟随默认"
-              @click="aform.chartBg = ''"
-            >
-              <span class="swatch__dot swatch__dot--auto">A</span>
-            </button>
-            <button
-              v-for="c in CHART_BG_COLORS"
-              :key="c"
-              type="button"
-              class="swatch"
-              :class="{ 'swatch--on': aform.chartBg === c }"
-              :title="c"
-              @click="aform.chartBg = c"
-            >
-              <span class="swatch__dot" :style="{ background: c }"></span>
-            </button>
-          </div>
-          <p class="hint">仅影响暗色主题下的 mermaid 图背景（白字、白边框）。</p>
         </label>
 
         <div class="row">

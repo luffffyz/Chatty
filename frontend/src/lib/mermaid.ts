@@ -1,46 +1,52 @@
-// Mermaid 渲染封装：跟随当前主题。
-//  浅色：theme 'default'（白底黑字，现状）
-//  暗色：theme 'base' + 深色背景(外观里九选一)/白字/白边框
+// Mermaid 渲染封装：画布跟随主题。
+//  浅色：theme 'default'（白画布）
+//  暗色：theme 'base' + 黑画布 + 白字/白描边（节点用深灰黑底，靠白边勾勒）
 import mermaid from 'mermaid'
-import { DEFAULT_CHART_BG, view } from '../theme'
+import { view } from '../theme'
 
 let seq = 0
 
-function darkVariables(bg: string): Record<string, string> {
+// 暗色画布：黑色；节点填充略亮的深灰，白字白边。
+const CANVAS = '#000000'
+const NODE = '#14161a'
+
+function darkVariables(): Record<string, string> {
   const white = '#ffffff'
   return {
-    background: bg,
-    primaryColor: bg,
+    background: CANVAS,
+    primaryColor: NODE,
     primaryBorderColor: white,
     primaryTextColor: white,
-    secondaryColor: bg,
-    tertiaryColor: bg,
+    secondaryColor: NODE,
+    secondaryBorderColor: white,
+    tertiaryColor: NODE,
+    tertiaryBorderColor: white,
     lineColor: '#ffffffcc',
-    edgeLabelBackground: bg,
+    edgeLabelBackground: '#24262b',
     fontColor: white,
     nodeTextColor: white,
     titleColor: white,
-    clusterBkg: bg,
+    clusterBkg: CANVAS,
     clusterBorder: white,
     // sequence
-    actorBkg: bg,
+    actorBkg: NODE,
     actorBorder: white,
     actorTextColor: white,
     actorLineColor: '#ffffffcc',
     signalColor: white,
     signalTextColor: white,
-    labelBoxBkg: bg,
+    labelBoxBkg: NODE,
     labelBoxBorder: white,
     labelTextColor: white,
     loopTextColor: white,
-    noteBkgColor: bg,
+    noteBkgColor: NODE,
     noteBorderColor: white,
     noteTextColor: white,
     activationBkgColor: '#ffffff33',
     activationBorderColor: white,
     // class / state
     classText: white,
-    stateBkg: bg,
+    stateBkg: NODE,
     stateBorder: white,
     stateLabelColor: white,
   }
@@ -51,13 +57,12 @@ export function renderMermaid(code: string): Promise<string> {
   const fontFamily = 'system-ui, sans-serif'
 
   if (dark) {
-    const bg = view.chartBg || DEFAULT_CHART_BG
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
       fontFamily,
-      themeVariables: darkVariables(bg),
+      themeVariables: darkVariables(),
     })
   } else {
     mermaid.initialize({

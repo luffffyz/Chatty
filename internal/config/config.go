@@ -63,10 +63,16 @@ const promptV3Raw = "" +
 	"- 不要编写 #set page、#set text、#import 等影响页面与字体的指令，排版由客户端统一控制。\n" +
 	"- 保持版面紧凑、易读；中文回复。"
 
-// defaultSystemPrompt 是当前（v4）默认提示词。
+// promptV4Raw 是第四版默认提示词。
+const promptV4Raw = promptV3Raw +
+	"\n- 中文里没有真正的斜体变体：中文的强调请用粗体 `_文字_`；斜体 `*...*` 留给西文、学名等拉丁文本（会真正倾斜）。"
+
+// defaultSystemPrompt 是当前（v5）默认提示词。
 func defaultSystemPrompt() string {
-	p := promptV3Raw +
-		"\n- 中文里没有真正的斜体变体：中文的强调请用粗体 `_文字_`；斜体 `*...*` 留给西文、学名等拉丁文本（会真正倾斜）。"
+	p := promptV4Raw +
+		"\n- mermaid 图外观约定：图形使用白色字体、白色边框；图背景色可选 #6e2b2b、#6e3a2b、#75561c、" +
+		"#69622b、#46692b、#255947、#254d59、#403159、#593148（暗色主题下画布为黑色）。" +
+		"不要在 mermaid 代码里写 %%{init: {...}}%% 这类样式指令。"
 	return strings.TrimSpace(p)
 }
 
@@ -132,7 +138,8 @@ func ensureDefaults(s *Settings) {
 		s.Appearance.FontSize = DefaultFontSize
 	}
 	sp := strings.TrimSpace(s.SystemPrompt)
-	if sp == legacyDefaultPrompt || sp == flowDefaultPrompt || sp == strings.TrimSpace(promptV3Raw) {
+	if sp == legacyDefaultPrompt || sp == flowDefaultPrompt ||
+		sp == strings.TrimSpace(promptV3Raw) || sp == strings.TrimSpace(promptV4Raw) {
 		s.SystemPrompt = defaultSystemPrompt()
 	}
 }

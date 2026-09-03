@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { renderMermaid } from '../lib/mermaid'
-import { DEFAULT_CHART_BG, view } from '../theme'
+import { view } from '../theme'
 
 const props = defineProps<{ source: string }>()
 
@@ -23,7 +23,7 @@ async function render() {
 }
 
 function rerenderOnThemeChange() {
-  // 主题/配色变化：清掉旧图重新渲染
+  // 主题变化：清掉旧图重新渲染（画布黑/白跟随）
   if (svg.value || error.value) {
     svg.value = ''
     error.value = ''
@@ -37,13 +37,12 @@ watch(() => props.source, () => {
   error.value = ''
   render()
 })
-watch(() => [view.theme, view.chartBg], rerenderOnThemeChange)
+watch(() => view.theme, rerenderOnThemeChange)
 
-// 暗色：整卡背景与节点同色，靠白描边区分图形
-const containerStyle = computed(() => {
-  if (view.theme !== 'dark') return {}
-  return { background: view.chartBg || DEFAULT_CHART_BG, borderColor: 'transparent' }
-})
+// 画布跟随主题：浅色 = 白纸卡，暗色 = 黑色画布
+const containerStyle = computed(() =>
+  view.theme === 'dark' ? { background: '#000000', borderColor: 'transparent' } : {},
+)
 </script>
 
 <template>
