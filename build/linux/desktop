@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A Chatty application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/chatty.exe %u
+Terminal=false
+Type=Application
+Icon=chatty.exe
+Categories=Utility;
+StartupWMClass=chatty.exe
+
+ 

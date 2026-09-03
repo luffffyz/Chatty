@@ -28,3 +28,12 @@ coverage.html
 *.coverprofile
 *.test
 *.prof
+
+# Wails v3 生成物
+bin/
+.task/
+frontend/dist/
+frontend/node_modules/
+*.syso
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
