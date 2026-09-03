@@ -2,43 +2,63 @@ package main
 
 import (
 	"embed"
-
 	"log"
-	"time"
+	"os"
+	"path/filepath"
+
+	"chatty/internal/chat"
+	"chatty/internal/config"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// Wails uses Go's `embed` package to embed the frontend files into the binary.
-// Any files in the frontend/dist folder will be embedded into the binary and
-// made available to the frontend.
-// See https://pkg.go.dev/embed for more information.
-
+// Wails 把 frontend/dist 嵌入二进制作为前端资产。
+//
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
-	application.RegisterEvent[string]("time")
+	// 注册流式聊天事件，绑定生成器会为前端提供强类型订阅 API。
+	application.RegisterEvent[ChatDeltaEvent]("chat:delta")
+	application.RegisterEvent[ChatDoneEvent]("chat:done")
+	application.RegisterEvent[ChatErrorEvent]("chat:error")
 }
 
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
 func main() {
+	dataDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("resolve user config dir: %v", err)
+	}
+	dataDir = filepath.Join(dataDir, "Chatty")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		log.Fatalf("create config dir: %v", err)
+	}
 
-	// Create a new Wails application by providing the necessary options.
-	// Variables 'Name' and 'Description' are for application metadata.
-	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
-	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
-	// 'Mac' options tailor the application when running an macOS.
+	settingsPath := filepath.Join(dataDir, "settings.json")
+	cfg, err := config.Load(settingsPath)
+	if err != nil {
+		log.Fatalf("load settings: %v", err)
+	}
+	// 首次运行：把默认设置落盘，便于用户直接编辑。
+	if len(cfg.Providers) == 0 {
+		if err := config.Save(settingsPath, cfg); err != nil {
+			log.Printf("save default settings: %v", err)
+		}
+	}
+
+	store, err := chat.Open(filepath.Join(dataDir, "chatty.db"))
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer store.Close()
+
+	chatSvc := NewChatService(store, cfg, settingsPath, nil)
+
 	app := application.New(application.Options{
 		Name:        "Chatty",
-		Description: "A demo of using raw HTML & CSS",
+		Description: "Typst-first local chatbot",
 		Services: []application.Service{
-			application.NewService(&GreetService{}),
+			application.NewService(chatSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -47,41 +67,25 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+	// 事件对象挂在 Application 上，而 service 在 Options 中构造；
+	// 二者无循环依赖冲突——service 方法在 app.Run() 之后才被调用，
+	// 在此之前注入 emitter 是安全的。
+	chatSvc.emitter = app.Event
 
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Window 1",
-		// Window sized to the golden ratio (1000 / 618 ≈ 1.618).
-		Width:  1000,
-		Height: 618,
+		Title:  "Chatty",
+		Width:  1080,
+		Height: 720,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
-		BackgroundColour: application.NewRGB(6, 7, 15),
+		BackgroundColour: application.NewRGB(248, 249, 250),
 		URL:              "/",
 	})
 
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
-		}
-	}()
-
-	// Run the application. This blocks until the application has been exited.
-	err := app.Run()
-
-	// If an error occurred while running the application, log it and exit.
-	if err != nil {
+	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -5,10 +5,16 @@
 // @ts-ignore: Unused imports
 import type { Events } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as main$0 from "../../../../../chatty/models.js";
+
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
-            "time": string;
+            "chat:delta": main$0.ChatDeltaEvent;
+            "chat:done": main$0.ChatDoneEvent;
+            "chat:error": main$0.ChatErrorEvent;
         }
     }
 }

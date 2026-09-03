@@ -9,6 +9,7 @@ const props = defineProps<{
   role: ChatRole
   content: string
   streaming?: boolean
+  failed?: boolean
 }>()
 
 const isUser = computed(() => props.role === 'user')
@@ -23,7 +24,10 @@ const renderedContent = computed(() => props.content)
 
 <template>
   <div class="msg" :class="isUser ? 'msg--user' : 'msg--assistant'">
-    <div class="msg__bubble">
+    <div class="msg__bubble" :class="{ 'msg__bubble--failed': failed }">
+      <p v-if="failed && !content && !streaming" class="msg__failed">
+        请求失败，请检查设置或网络。
+      </p>
       <!-- 流式中 / 纯文本 -->
       <template v-if="!blocks">
         <pre class="msg__stream"><span>{{ renderedContent }}</span><span
@@ -65,6 +69,14 @@ const renderedContent = computed(() => props.content)
 .msg--user .msg__bubble {
   background: #eef4ff;
   border-color: #d6e4ff;
+}
+.msg__bubble--failed {
+  border-color: #ffd1cc;
+}
+.msg__failed {
+  color: #b42318;
+  font-size: 13px;
+  margin: 0 0 4px;
 }
 .msg__text {
   margin: 0;
