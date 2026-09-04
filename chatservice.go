@@ -303,8 +303,16 @@ func (s *ChatService) runCompletion(sessionID, text, effort string, toolServers 
 		req.Tools = kit.tools()
 	}
 	s.logf("completion start", "session", sessionID, "roundsMax", 8, "tools", len(req.Tools))
-	if sp := trimSpace(s.settings.SystemPrompt); sp != "" {
-		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleSystem, Content: sp})
+	{
+		// 动态注入当前日期时间：让模型感知“现在”，不写入设置、每次请求都新鲜。
+		// 即使系统提示为空也单独注入，保证模型总能看到“当前时间”。
+		sys := trimSpace(s.settings.SystemPrompt)
+		if sys != "" {
+			sys += "\n\n" + nowContextLine()
+		} else {
+			sys = nowContextLine()
+		}
+		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleSystem, Content: sys})
 	}
 	for _, m := range msgs {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.Role(m.Role), Content: m.Content})
@@ -579,3 +587,12 @@ func firstRunes(s string, n int) string {
 }
 
 func trimSpace(v string) string { return strings.TrimSpace(v) }
+
+// nowContextLine 生成本机当前时间的一行中文说明，拼到系统提示末尾，
+// 让模型知道“现在是何时”（本地时区）。
+func nowContextLine() string {
+	week := [...]string{"日", "一", "二", "三", "四", "五", "六"}
+	t := time.Now()
+	return fmt.Sprintf("（当前时间：%d 年 %d 月 %d 日 星期%s %02d:%02d，本地时区 %s。回答与时间相关的问题时以此为准。）",
+		t.Year(), t.Month(), t.Day(), week[int(t.Weekday())], t.Hour(), t.Minute(), t.Format("MST"))
+}
