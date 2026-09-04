@@ -1,11 +1,15 @@
 # Chatty
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 experimental Typst chatbot —— 以 **Typst 为默认文本格式**的本地聊天桌面应用。
 
 - 框架：Wails v3（Go 后端）+ Vue3/Vite（前端）
 - 渲染：Typst（wasm，浏览器内编译）+ Mermaid
-- LLM：可插拔多 provider（OpenAI-compatible 系）
+- LLM：可插拔多 provider（OpenAI-compatible 系），支持 MCP（Streamable HTTP）工具
 - 会话：SQLite 本地存储
+
+开源协议：**MIT**（见 [LICENSE](LICENSE)）。字体资源版权归其各自作者，来源与许可见 `frontend/public/fonts/README.md`。
 
 架构决策与模块划分见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
