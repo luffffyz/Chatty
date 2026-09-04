@@ -216,7 +216,7 @@ func readEventStream(r io.Reader, onDelta, onThinking DeltaFunc) (*ChatResult, e
 		}
 		tc := ToolCall{ID: a.id, Type: a.typ, Function: FunctionCall{Name: a.name}}
 		if s := a.args.String(); s != "" {
-			tc.Function.Arguments = json.RawMessage(s)
+			tc.Function.Arguments = s
 		}
 		res.ToolCalls = append(res.ToolCalls, tc)
 	}

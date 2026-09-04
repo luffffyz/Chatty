@@ -335,7 +335,7 @@ func (s *ChatService) runCompletion(sessionID, text, effort string, useTools boo
 		// 依次执行工具，结果以 tool 角色回传
 		for _, tc := range res.ToolCalls {
 			name := tc.Function.Name
-			argsPreview := truncateStr(string(tc.Function.Arguments), 200)
+			argsPreview := truncateStr(tc.Function.Arguments, 200)
 			emitThink("调用了工具 " + name + "\n")
 			s.logf("tool call", "session", sessionID, "round", round, "name", name, "args", argsPreview)
 			startT := time.Now()
@@ -444,7 +444,7 @@ func (s *ChatService) execTool(ctx context.Context, kit *mcpKit, tc llm.ToolCall
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	res, err := cl.CallTool(callCtx, ref.toolName, tc.Function.Arguments)
+	res, err := cl.CallTool(callCtx, ref.toolName, json.RawMessage(tc.Function.Arguments))
 	if err != nil {
 		return "", err
 	}

@@ -22,9 +22,11 @@ const (
 )
 
 // FunctionCall 是一次函数调用请求的参数部分。
+// Arguments 保存原始 JSON 文本（如 {"q":"x"}）。OpenAI 兼容端点要求
+// assistant 回传消息里 function.arguments 是字符串而非对象。
 type FunctionCall struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments,omitempty"`
 }
 
 // ToolCall 描述模型发起的一次工具调用（OpenAI tool_calls 片段）。
