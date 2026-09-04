@@ -8,7 +8,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const { state, saveSettings } = useChat()
 
-const tab = ref<'provider' | 'appearance' | 'mcp'>('provider')
+const tab = ref<'provider' | 'prompt' | 'mcp' | 'appearance'>('provider')
 const saving = ref(false)
 const errMsg = ref('')
 
@@ -24,9 +24,11 @@ const pform = reactive({
   baseURL: PRESETS[0].baseURL,
   apiKey: '',
   model: PRESETS[0].example,
-  systemPrompt: '',
   models: [] as string[],
 })
+
+// 系统提示词独立成一页（仅改全局 systemPrompt）
+const promptText = ref('')
 
 // ---------- 提供商: 模型扫描 ----------
 const scanning = ref(false)
@@ -168,7 +170,7 @@ function syncFromSettings() {
   aform.theme = cur.appearance?.theme ?? 'system'
   aform.fontSize = cur.appearance?.fontSize ?? 14
   aform.chartBg = cur.appearance?.chartBg ?? ''
-  pform.systemPrompt = cur.systemPrompt
+  promptText.value = cur.systemPrompt
 
   // 无编辑目标(初次打开/目标被删)时，载入当前使用中的提供商
   if (!editing.id) {
@@ -237,11 +239,18 @@ async function saveProvider() {
     next.activeProviderId = provider.ID
     next.activeModel = provider.Model
   }
-  next.systemPrompt = pform.systemPrompt
   await doSave(next)
   editing.id = provider.ID
   editing.index = findIndex(provider.ID)
   markClean()
+}
+
+// 保存系统提示词（独立一页）
+async function savePrompt() {
+  errMsg.value = ''
+  const next = cloneBase()
+  next.systemPrompt = promptText.value.trim()
+  await doSave(next)
 }
 
 // ---------- MCP 服务器管理（Streamable HTTP） ----------
@@ -335,6 +344,14 @@ onMounted(syncFromSettings)
           @click="tab = 'provider'"
         >
           提供商
+        </button>
+        <button
+          type="button"
+          class="tab"
+          :class="{ 'tab--on': tab === 'prompt' }"
+          @click="tab = 'prompt'"
+        >
+          提示词
         </button>
         <button
           type="button"
@@ -442,11 +459,6 @@ onMounted(syncFromSettings)
           {{ scanMsg }}
         </p>
 
-        <label class="field">
-          <span>系统提示（Typst 输出约定）</span>
-          <textarea v-model="pform.systemPrompt" rows="7"></textarea>
-        </label>
-
         <p class="hint">API Key 明文保存在本地 settings.json，仅用于直连你配置的端点。</p>
 
         <div class="row row--between">
@@ -455,6 +467,20 @@ onMounted(syncFromSettings)
             保存后设为当前使用
           </label>
           <button class="btn" :disabled="saving" @click="saveProvider">保存</button>
+        </div>
+      </template>
+
+      <!-- ============ 提示词 ============ -->
+      <template v-else-if="tab === 'prompt'">
+        <label class="field">
+          <span>系统提示词（Typst 输出约定）</span>
+          <textarea v-model="promptText" rows="14" spellcheck="false"></textarea>
+        </label>
+        <p class="hint">
+          保存即全局生效；每次请求会在末尾自动追加“当前日期时间”，无需写进这里。留空则仅发时间行。
+        </p>
+        <div class="row">
+          <button class="btn" :disabled="saving" @click="savePrompt">保存</button>
         </div>
       </template>
 
