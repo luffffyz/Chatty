@@ -42,7 +42,6 @@ const FONT_NAMES: string[] = [
   'NewCMMath-Regular.otf',
   'NotoColorEmoji-Regular-COLR.subset.ttf',
   'Roboto-Regular.ttf',
-  'TwitterColorEmoji.ttf',
 ]
 
 // 逐个、容忍失败地加载字体：某个字体（尤其 ~24MB 大文件）下载失败只

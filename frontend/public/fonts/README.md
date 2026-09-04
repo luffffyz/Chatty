@@ -10,7 +10,7 @@ Chatty 排版（Typst）使用以下字体，均来自可再分发来源：
 | DejaVuSansMono*.ttf | typst-assets | 自由许可（Bitstream Vera 派生）|
 | InriaSerif-*.ttf | typst-dev-assets | OFL |
 | Roboto-Regular.ttf | typst-dev-assets | Apache-2.0 |
-| NotoColorEmoji-*.ttf / TwitterColorEmoji.ttf | typst-dev-assets | OFL（Noto）/ Bitstream 类许可 |
+| NotoColorEmoji-*.ttf | typst-dev-assets | OFL |
 
 typst-assets / typst-dev-assets 内容许可见：
 https://github.com/typst/typst-assets
