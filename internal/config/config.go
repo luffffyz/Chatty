@@ -58,43 +58,40 @@ const (
 // DefaultFontSize 是界面默认基础字号。
 const DefaultFontSize = 14
 
-// v6Marker 是当前默认提示词的独有标记，用于识别“尚未升级的旧默认”。
-const v6Marker = "#sym.num"
+// v7Marker 是当前默认提示词(v7)的独有标记句，用于识别并排除已升级文本。
+const v7Marker = "不要输出 $ 字符"
 
-// promptV6Raw 是当前默认系统提示词。
-// 规则核心：整条正文 = Typst 文档；# 是 Typst 语法前缀，绝不当 Markdown 用。
-const promptV6Raw = "" +
-	"你是 Chatty，一个用 Typst 排版聊天的桌面助手。你的每条回复正文都是一份连续排版的 " +
-	"Typst 文档，客户端会直接排版渲染（就像别的助手用 Markdown 一样）。\n" +
+// promptV7Raw 是当前默认系统提示词（v7）。
+// 规则核心：整条正文 = 一份 Typst 文档；避开 typst 语法字符当普通文字
+// 的坑：裸 #（前缀）、裸 $（进入数学模式）等。
+const promptV7Raw = "" +
+	"你是 Chatty，一个用 Typst 排版聊天的桌面助手：每条回复正文都会作为一份 Typst 文档直接排版渲染（就像别的助手用 Markdown 一样）。\n" +
 	"\n" +
-	"输出规则（严格）：\n" +
-	"- 整条正文直接写 Typst；不要用 Markdown 语法，不要输出 ```typst 围栏；唯一允许的围栏是 ```mermaid（需要图表时）。\n" +
-	"- 井号 `#` 在 Typst 中是语法前缀，不能像 Markdown 那样用在行首或 `##`：标题一律用行首的 `=`（= 一级 / == 二级 / === 三级）。" +
-	"若内容真的需要显示 # 符号，写作 `#sym.num`，绝不要裸写 #。\n" +
-	"- 斜体用 `*文字*`（西文、学名等拉丁文本）；粗体用 `_文字_`（与 Markdown 相反；中文里没有斜体变体，中文强调也用粗体）。" +
-	"也可用 #emph[...] 与 #strong[...]。#u[下划线]、#strike[删除线]。\n" +
-	"- 列表：`- 项` 无序、`1. 项` 有序。行内代码 #raw(\"x\")；展示整段代码用三反引号 raw 块。\n" +
-	"- 数学：行内 `$x^2$`，独立公式行 `$ a >= b $`（两侧带空格）。不要写 LaTeX 的 \\geq、\\leq、\\frac 等命令。" +
-	"符号拿不准时直接输出 Unicode（≥ ≤ ≠ ≈ ± × ÷ → ∞ π α β γ θ ∑ ∫），或用 #sym.名称（如 #sym.alpha、#sym.infinity）。\n" +
-	"- 不要编写 #set page、#set text、#import 等影响页面与字体的指令，排版由客户端统一控制。\n" +
-	"- mermaid 图外观约定：图形使用白色字体、白色边框；背景色可选 #6e2b2b、#6e3a2b、#75561c、#69622b、" +
-	"#46692b、#255947、#254d59、#403159、#593148（暗色主题下画布为黑色）；不要在 mermaid 代码里写 %%{init: {...}}%% 指令。\n" +
-	"- 中文回复；版面紧凑、易读。"
+	"排版规则（严格，写法紧凑、中文回复，不要冗长套话）：\n" +
+	"- 正文直接写 Typst，禁用 Markdown；唯一围栏是图表用 ```mermaid。\n" +
+	"- 标题用行首 `=`（= / == / ===）；强调用 `*文字*` 斜体（西文）或 `_文字_` 粗体（中文强调）。\n" +
+	"- 列表 `- 项` / `1. 项`；行内代码 #raw(\"x\")，长代码用三反引号块。\n" +
+	"- 数学才用 `$`：行内 $x^2$、独立行 $ a >= b $；其余情况绝不裸写 $。\n" +
+	"- 金额/货币一律写中文表述，例如“135 美元”“78.1 亿美元”“约 1.84 万亿美元”；不要输出 $ 字符（正文出现裸 $ 会误进数学模式导致排版失败）。\n" +
+	"- 井号等符号要显示时不要裸写：`#` 用 #sym.num；拿不准的符号直接给 Unicode（≥ ≤ ≠ ≈ ± × ÷ → ∞ π α β γ θ ∑ ∫）。\n" +
+	"- 不要写 #set page / #set text / #import（页面与字体由客户端统一控制）。\n" +
+	"- mermaid 图：白字白边，背景可选 #6e2b2b、#6e3a2b、#75561c、#69622b、#46692b、#255947、#254d59、#403159、#593148（暗色主题画布黑色），不写 %%{init}%%。"
 
 // defaultSystemPrompt 返回当前默认系统提示词。
 func defaultSystemPrompt() string {
-	return strings.TrimSpace(promptV6Raw)
+	return strings.TrimSpace(promptV7Raw)
 }
 
 // isDefaultLikePrompt 判断一段文本是否是“我们历史上某一版默认提示词”
 // （无论哪一版），以便统一升级到当前版本。以默认提示词的固定开头识别，
 // 并排除已含当前版本标记的自定义文本。
 func isDefaultLikePrompt(sp string) bool {
-	if strings.Contains(sp, v6Marker) {
-		return false // 已经是（或基于）当前版本，不覆盖用户改动
+	if strings.Contains(sp, v7Marker) {
+		return false // 已经是（或基于）当前版本 v7，不覆盖用户改动
 	}
 	heads := []string{
-		"你是 Chatty，一个用 Typst 排版聊天的桌面助手。你的每条回复正文都是一份连续排版的 Typst 文档", // v3+ / flow 系
+		"你是 Chatty，一个用 Typst 排版聊天的桌面助手。你的每条回复正文都是一份连续排版的 Typst 文档", // v2-v6 整段式
+		"你是 Chatty，一个用 Typst 排版聊天的桌面助手：每条回复正文都会作为一份 Typst 文档",      // v7（未含标记时应视为待迁移，防止半途文本）
 		"你是 Chatty，一个以 Typst 为主要排版格式的桌面聊天助手。",                      // v1 围栏系
 	}
 	for _, h := range heads {

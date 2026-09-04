@@ -22,7 +22,7 @@ func TestLoadMissingReturnsDefault(t *testing.T) {
 	if s.Appearance.Theme != ThemeSystem || s.Appearance.FontSize != DefaultFontSize {
 		t.Errorf("default appearance = %+v", s.Appearance)
 	}
-	if !strings.Contains(s.SystemPrompt, v6Marker) {
+	if !strings.Contains(s.SystemPrompt, v7Marker) {
 		t.Errorf("default prompt should contain v6 marker #sym.num")
 	}
 }
@@ -112,7 +112,7 @@ func TestOldDefaultPromptsMigrated(t *testing.T) {
 		if out.SystemPrompt != defaultSystemPrompt() {
 			t.Errorf("old default prompt should be migrated to v6; got %q", out.SystemPrompt[:40])
 		}
-		if !strings.Contains(out.SystemPrompt, v6Marker) {
+		if !strings.Contains(out.SystemPrompt, v7Marker) {
 			t.Error("migrated prompt should contain v6 marker")
 		}
 	}
