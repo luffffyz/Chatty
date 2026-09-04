@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"chatty/internal/chat"
 	"chatty/internal/config"
 	"chatty/internal/llm"
+	"chatty/internal/mcp"
 )
 
 // ---------- 事件负载（经 application.RegisterEvent 注册，前端可强类型订阅） ----------
@@ -25,6 +27,7 @@ type ChatDeltaEvent struct {
 type ChatDoneEvent struct {
 	SessionID string `json:"sessionId"`
 	Content   string `json:"content"`
+	Thinking  string `json:"thinking"`
 }
 
 // ChatErrorEvent 在流式过程出错时推送。
@@ -55,6 +58,7 @@ type MessageDTO struct {
 	ID        int64  `json:"id"`
 	Role      string `json:"role"`
 	Content   string `json:"content"`
+	Thinking  string `json:"thinking"`
 	CreatedMs int64  `json:"createdMs"`
 }
 
@@ -73,6 +77,10 @@ type ChatService struct {
 
 	mu   sync.Mutex
 	busy map[string]bool
+
+	// mcpMu 守卫 mcpClients：按 endpoint 复用 MCP 客户端（懒初始化会话）。
+	mcpMu      sync.Mutex
+	mcpClients map[string]*mcp.Client
 }
 
 // NewChatService 构造聊天服务。settings 会被深拷贝保存到 settingsPath。
@@ -85,7 +93,8 @@ func NewChatService(store chat.Store, cfg *config.Settings, settingsPath string,
 		client: func(p *config.Provider) llm.Provider {
 			return llm.NewOpenAICompatible(p.ID, p.BaseURL, p.APIKey)
 		},
-		busy: make(map[string]bool),
+		busy:       make(map[string]bool),
+		mcpClients: make(map[string]*mcp.Client),
 	}
 }
 
@@ -120,7 +129,7 @@ func (s *ChatService) GetMessages(sessionID string) ([]MessageDTO, error) {
 	}
 	out := make([]MessageDTO, len(msgs))
 	for i, m := range msgs {
-		out[i] = MessageDTO{ID: m.ID, Role: string(m.Role), Content: m.Content, CreatedMs: m.CreatedAt.UnixMilli()}
+		out[i] = MessageDTO{ID: m.ID, Role: string(m.Role), Content: m.Content, Thinking: m.Thinking, CreatedMs: m.CreatedAt.UnixMilli()}
 	}
 	return out, nil
 }
@@ -134,6 +143,7 @@ func (s *ChatService) DeleteSession(sessionID string) error {
 func (s *ChatService) GetSettings() (*config.Settings, error) {
 	cp := *s.settings
 	cp.Providers = append([]config.Provider(nil), s.settings.Providers...)
+	cp.MCPServers = append([]config.MCPServer(nil), s.settings.MCPServers...)
 	return &cp, nil
 }
 
@@ -212,7 +222,7 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 			return
 		}
 	}
-	if _, err := s.store.AppendMessage(sessionID, chat.RoleUser, text); err != nil {
+	if _, err := s.store.AppendMessage(sessionID, chat.RoleUser, text, ""); err != nil {
 		emitErr(err.Error())
 		return
 	}
@@ -229,7 +239,27 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 	}
 	msgs = append(msgs, chat.Message{Role: chat.RoleUser, Content: text})
 
-	req := llm.ChatRequest{Model: s.settings.ActiveModel, ReasoningEffort: effort}
+	prov := s.client(provCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// 文本/思考全文累积（跨工具轮）：文本推给 chat:delta，思考推给 chat:thinking
+	var full, think strings.Builder
+	emitDelta := func(delta string) {
+		full.WriteString(delta)
+		s.emitter.Emit("chat:delta", ChatDeltaEvent{SessionID: sessionID, Delta: delta})
+	}
+	emitThink := func(t string) {
+		think.WriteString(t)
+		s.emitter.Emit("chat:thinking", ChatThinkingEvent{SessionID: sessionID, Text: t})
+	}
+
+	// MCP 工具集合（此完成周期的固定快照）
+	kit := s.mcpKit(ctx)
+	for _, w := range kit.warnings {
+		emitThink("[MCP] " + w + "\n")
+	}
+	req := llm.ChatRequest{Model: s.settings.ActiveModel, ReasoningEffort: effort, Tools: kit.tools()}
 	if sp := trimSpace(s.settings.SystemPrompt); sp != "" {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleSystem, Content: sp})
 	}
@@ -237,31 +267,161 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.Role(m.Role), Content: m.Content})
 	}
 
-	prov := s.client(provCfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	maxRounds := 8
+	round := 0
+	for {
+		round++
+		res, err := prov.StreamChat(ctx, req, emitDelta, emitThink)
+		if err != nil {
+			emitErr("请求失败: " + err.Error())
+			return
+		}
 
-	var full strings.Builder
-	res, err := prov.StreamChat(ctx, req, func(delta string) {
-		full.WriteString(delta)
-		s.emitter.Emit("chat:delta", ChatDeltaEvent{SessionID: sessionID, Delta: delta})
-	}, func(think string) {
-		// 推理文本逐段透传，前端据此展示"思考中"状态
-		s.emitter.Emit("chat:thinking", ChatThinkingEvent{SessionID: sessionID, Text: think})
-	})
-	if err != nil {
-		emitErr("请求失败: " + err.Error())
-		return
+		// 记录本轮 assistant 消息（含 tool_calls，回传给兼容端点必须带上）
+		hist := llm.Message{Role: llm.RoleAssistant, Content: res.Content}
+		if len(res.ToolCalls) > 0 {
+			hist.ToolCalls = res.ToolCalls
+		}
+		req.Messages = append(req.Messages, hist)
+
+		if len(res.ToolCalls) == 0 {
+			break // 本轮直接给出最终文本
+		}
+		if round >= maxRounds {
+			emitErr("工具调用轮次过多，已停止（可能陷入循环）")
+			return
+		}
+
+		// 依次执行工具，结果以 tool 角色回传
+		for _, tc := range res.ToolCalls {
+			name := tc.Function.Name
+			emitThink("调用了工具 " + name + "\n")
+			out, callErr := s.execTool(ctx, kit, tc)
+			if callErr != nil {
+				out = "[工具执行失败] " + callErr.Error()
+			} else if out == "" {
+				out = "（工具无返回）"
+			}
+			req.Messages = append(req.Messages, llm.Message{
+				Role:       llm.RoleTool,
+				ToolCallID: tc.ID,
+				Content:    out,
+			})
+		}
 	}
-	if trimSpace(full.String()) == "" {
-		full.Reset()
-		full.WriteString(res.Content)
+
+	content := strings.TrimSpace(full.String())
+	if content == "" {
+		// 无文本（理论少见）：以最后一轮 model 回复兜底
+		content = strings.TrimSpace(req.Messages[len(req.Messages)-1].Content)
 	}
-	if _, err := s.store.AppendMessage(sessionID, chat.RoleAssistant, full.String()); err != nil {
+	thinkingText := strings.TrimSpace(think.String())
+	if _, err := s.store.AppendMessage(sessionID, chat.RoleAssistant, content, thinkingText); err != nil {
 		emitErr(err.Error())
 		return
 	}
-	s.emitter.Emit("chat:done", ChatDoneEvent{SessionID: sessionID, Content: full.String()})
+	s.emitter.Emit("chat:done", ChatDoneEvent{SessionID: sessionID, Content: content, Thinking: thinkingText})
+}
+
+// ---------- MCP 工具集成 ----------
+
+// mcpKit 是本轮对话所用 MCP 服务器的快照：按 endpoint 复用客户端，
+// 工具统一暴露为 "serverID::toolName"，避免跨服务器同名冲突。
+type mcpKit struct {
+	clients  map[string]*mcp.Client // serverID -> client
+	byName   map[string]mcpToolRef  // 完整工具名 -> 引用
+	toolDefs []llm.ToolDef
+	warnings []string
+}
+
+type mcpToolRef struct {
+	serverID string
+	toolName string
+}
+
+// mcpKit 从当前设置构建工具快照；单台服务器连不上只记 warning，不阻塞聊天。
+func (s *ChatService) mcpKit(ctx context.Context) *mcpKit {
+	kit := &mcpKit{
+		clients: map[string]*mcp.Client{},
+		byName:  map[string]mcpToolRef{},
+	}
+	for i := range s.settings.MCPServers {
+		sv := &s.settings.MCPServers[i]
+		ep := trimSpace(sv.Endpoint)
+		if ep == "" || trimSpace(sv.ID) == "" {
+			continue
+		}
+		cl := s.mcpClientFor(ep)
+		tools, err := cl.ListTools(ctx)
+		if err != nil {
+			kit.warnings = append(kit.warnings, fmt.Sprintf("「%s」连接失败: %v", labelOr(sv.Label, sv.ID), err))
+			continue
+		}
+		kit.clients[sv.ID] = cl
+		for _, t := range tools {
+			name := sv.ID + "::" + t.Name
+			params := t.InputSchema
+			if len(params) == 0 {
+				params = json.RawMessage(`{"type":"object","properties":{}}`)
+			}
+			kit.byName[name] = mcpToolRef{serverID: sv.ID, toolName: t.Name}
+			kit.toolDefs = append(kit.toolDefs, llm.ToolDef{
+				Type: "function",
+				Function: llm.ToolFunctionDef{
+					Name:        name,
+					Description: t.Description,
+					Parameters:  params,
+				},
+			})
+		}
+	}
+	return kit
+}
+
+// tools 返回 llm 层工具定义（无工具时返回 nil）。
+func (k *mcpKit) tools() []llm.ToolDef {
+	return k.toolDefs
+}
+
+// execTool 在对应 MCP 服务器上执行一次工具调用。
+func (s *ChatService) execTool(ctx context.Context, kit *mcpKit, tc llm.ToolCall) (string, error) {
+	ref, ok := kit.byName[tc.Function.Name]
+	if !ok {
+		return "", fmt.Errorf("未知工具 %q（可能已被移除）", tc.Function.Name)
+	}
+	cl := kit.clients[ref.serverID]
+	if cl == nil {
+		return "", fmt.Errorf("工具 %q 所属 MCP 服务器未连接", tc.Function.Name)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	res, err := cl.CallTool(callCtx, ref.toolName, tc.Function.Arguments)
+	if err != nil {
+		return "", err
+	}
+	if res.IsError {
+		return "", fmt.Errorf("工具返回错误: %s", res.Content)
+	}
+	return res.Content, nil
+}
+
+// mcpClientFor 按 endpoint 返回缓存的 MCP 客户端。
+func (s *ChatService) mcpClientFor(endpoint string) *mcp.Client {
+	s.mcpMu.Lock()
+	defer s.mcpMu.Unlock()
+	if cl, ok := s.mcpClients[endpoint]; ok {
+		return cl
+	}
+	cl := mcp.New(endpoint)
+	s.mcpClients[endpoint] = cl
+	return cl
+}
+
+func labelOr(label, id string) string {
+	if trimSpace(label) != "" {
+		return trimSpace(label)
+	}
+	return id
 }
 
 func (s *ChatService) activeProvider() *config.Provider {
@@ -288,6 +448,16 @@ func validateSettings(st *config.Settings) error {
 		}
 		if !found {
 			return errors.New("activeProviderId 未指向任何已配置 provider")
+		}
+	}
+	// MCP 服务器基本校验：填写了就必须有 ID 与合法的 http(s) 端点
+	for i := range st.MCPServers {
+		m := &st.MCPServers[i]
+		if trimSpace(m.ID) == "" || trimSpace(m.Endpoint) == "" {
+			return fmt.Errorf("MCP 服务器 %q 缺少 id 或 endpoint", m.Label)
+		}
+		if !strings.HasPrefix(m.Endpoint, "http://") && !strings.HasPrefix(m.Endpoint, "https://") {
+			return fmt.Errorf("MCP 服务器 %q 的 endpoint 必须是 http(s) URL", m.Label)
 		}
 	}
 	return nil

@@ -62,6 +62,15 @@ type sseChunk struct {
 			Role             string `json:"role"`
 			Content          string `json:"content"`
 			ReasoningContent string `json:"reasoning_content"`
+			ToolCalls        []struct {
+				Index    int    `json:"index"`
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
@@ -86,6 +95,9 @@ func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDe
 	}
 	if req.ReasoningEffort != "" {
 		body["reasoning_effort"] = req.ReasoningEffort
+	}
+	if len(req.Tools) > 0 {
+		body["tools"] = req.Tools
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -115,11 +127,21 @@ func (p *OpenAICompatible) StreamChat(ctx context.Context, req ChatRequest, onDe
 }
 
 // readEventStream 逐行消费 SSE 响应，把文本增量交给 onDelta、推理增量
-// 交给 onThinking 并累积。
+// 交给 onThinking，并累积完整回复（含 tool_calls 分片拼接）。
 func readEventStream(r io.Reader, onDelta, onThinking DeltaFunc) (*ChatResult, error) {
 	res := &ChatResult{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+
+	// tool_calls 以 (index) 为单位分片到达：arguments 跨块累积，id/name 通常首块给全。
+	type acc struct {
+		id   string
+		typ  string
+		name string
+		args strings.Builder
+	}
+	order := []int{}
+	calls := map[int]*acc{}
 
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -153,6 +175,26 @@ func readEventStream(r io.Reader, onDelta, onThinking DeltaFunc) (*ChatResult, e
 					onThinking(ch.Delta.ReasoningContent)
 				}
 			}
+			for _, tc := range ch.Delta.ToolCalls {
+				a, ok := calls[tc.Index]
+				if !ok {
+					a = &acc{}
+					calls[tc.Index] = a
+					order = append(order, tc.Index)
+				}
+				if tc.ID != "" {
+					a.id = tc.ID
+				}
+				if tc.Type != "" {
+					a.typ = tc.Type
+				}
+				if tc.Function.Name != "" {
+					a.name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					a.args.WriteString(tc.Function.Arguments)
+				}
+			}
 			if ch.FinishReason != nil {
 				res.StopReason = *ch.FinishReason
 			}
@@ -164,6 +206,19 @@ func readEventStream(r io.Reader, onDelta, onThinking DeltaFunc) (*ChatResult, e
 	}
 	if err := sc.Err(); err != nil {
 		return res, fmt.Errorf("llm: read stream: %w", err)
+	}
+
+	// 按到达顺序固化 tool_calls
+	for _, idx := range order {
+		a := calls[idx]
+		if a == nil || a.name == "" {
+			continue
+		}
+		tc := ToolCall{ID: a.id, Type: a.typ, Function: FunctionCall{Name: a.name}}
+		if s := a.args.String(); s != "" {
+			tc.Function.Arguments = json.RawMessage(s)
+		}
+		res.ToolCalls = append(res.ToolCalls, tc)
 	}
 	return res, nil
 }

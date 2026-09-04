@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import type { Provider, Settings } from '../../bindings/chatty/internal/config/models'
+import type { MCPServer, Provider, Settings } from '../../bindings/chatty/internal/config/models'
 import { ChatService } from '../../bindings/chatty'
 import { useChat } from '../chat'
 
@@ -8,7 +8,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const { state, saveSettings } = useChat()
 
-const tab = ref<'provider' | 'appearance'>('provider')
+const tab = ref<'provider' | 'appearance' | 'mcp'>('provider')
 const saving = ref(false)
 const errMsg = ref('')
 
@@ -197,6 +197,7 @@ function cloneBase(): Settings {
     activeProviderId: cur?.activeProviderId ?? '',
     activeModel: cur?.activeModel ?? '',
     systemPrompt: cur?.systemPrompt ?? '',
+    mcpServers: cur?.mcpServers ?? [],
     appearance: {
       theme: cur?.appearance?.theme ?? 'system',
       fontSize: cur?.appearance?.fontSize ?? 14,
@@ -243,6 +244,49 @@ async function saveProvider() {
   markClean()
 }
 
+// ---------- MCP 服务器管理（Streamable HTTP） ----------
+const mcpList = computed(() => state.settings?.mcpServers ?? [])
+const mform = reactive({ label: '', endpoint: '' })
+const editingMCP = ref('')
+
+function mcpReset() {
+  editingMCP.value = ''
+  mform.label = ''
+  mform.endpoint = ''
+}
+function mcpEdit(m: MCPServer) {
+  editingMCP.value = m.id
+  mform.label = m.label ?? ''
+  mform.endpoint = m.endpoint ?? ''
+}
+function genMCPServerID(): string {
+  return 'mcp' + Date.now().toString(36)
+}
+async function saveMCP() {
+  errMsg.value = ''
+  if (!mform.label.trim() || !mform.endpoint.trim()) {
+    errMsg.value = 'MCP 服务器需填写名称与 endpoint'
+    return
+  }
+  const next = cloneBase()
+  const list = next.mcpServers ?? []
+  const id = editingMCP.value || genMCPServerID()
+  const server: MCPServer = { id, label: mform.label.trim(), endpoint: mform.endpoint.trim() }
+  const idx = list.findIndex((x) => x.id === id)
+  if (idx >= 0) list[idx] = server
+  else list.push(server)
+  next.mcpServers = list
+  await doSave(next)
+  editingMCP.value = id
+}
+async function deleteMCP(m: MCPServer) {
+  if (!window.confirm(`删除 MCP 服务器「${m.label || m.id}」？`)) return
+  const next = cloneBase()
+  next.mcpServers = (next.mcpServers ?? []).filter((x) => x.id !== m.id)
+  await doSave(next)
+  if (editingMCP.value === m.id) mcpReset()
+}
+
 async function saveAppearance() {
   errMsg.value = ''
   const next = cloneBase()
@@ -284,6 +328,14 @@ onMounted(syncFromSettings)
           @click="tab = 'provider'"
         >
           提供商
+        </button>
+        <button
+          type="button"
+          class="tab"
+          :class="{ 'tab--on': tab === 'mcp' }"
+          @click="tab = 'mcp'"
+        >
+          MCP
         </button>
         <button
           type="button"
@@ -399,8 +451,50 @@ onMounted(syncFromSettings)
         </div>
       </template>
 
+      <!-- ============ MCP ============ -->
+      <template v-else-if="tab === 'mcp'">
+        <p class="hint">
+          配置 MCP 服务器（Streamable HTTP，JSON-RPC over POST）。配置后，模型在需要时可调用这些
+          服务器暴露的工具——工具名形如 <code>serverID::tool</code>。仅当前 provider 支持函数调用时生效。
+        </p>
+
+        <div class="plist">
+          <div class="plist__head">
+            <span class="plist__title">已配置的 MCP 服务器</span>
+            <button type="button" class="chip" @click="mcpReset">＋ 添加</button>
+          </div>
+          <div
+            v-for="m in mcpList"
+            :key="m.id"
+            class="pitem"
+            :class="{ 'pitem--on': m.id === editingMCP }"
+            @click="mcpEdit(m)"
+          >
+            <span class="pitem__name">{{ m.label || m.id }}</span>
+            <span class="pitem__base">{{ m.endpoint }}</span>
+            <button class="pitem__del" title="删除" @click.stop="deleteMCP(m)">✕</button>
+          </div>
+          <p v-if="!mcpList.length" class="hint">还没有 MCP 服务器——例如 DeepWiki：https://mcp.deepwiki.com/mcp</p>
+        </div>
+
+        <label class="field">
+          <span>名称</span>
+          <input v-model="mform.label" type="text" placeholder="如 DeepWiki" />
+        </label>
+        <label class="field">
+          <span>Endpoint（Streamable HTTP）</span>
+          <input v-model="mform.endpoint" type="text" placeholder="https://…/mcp" />
+        </label>
+
+        <div class="row">
+          <button class="btn" :disabled="saving" @click="saveMCP">
+            {{ editingMCP ? '保存修改' : '添加服务器' }}
+          </button>
+        </div>
+      </template>
+
       <!-- ============ 外观 ============ -->
-      <template v-else>
+      <template v-else-if="tab === 'appearance'">
         <label class="field">
           <span>主题</span>
           <div class="themes">

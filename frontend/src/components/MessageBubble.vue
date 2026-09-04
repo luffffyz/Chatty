@@ -56,12 +56,16 @@ async function copyRaw() {
         </template>
       </template>
 
-      <!-- 完整消息：Typst 排版主体 + mermaid 图 -->
+      <!-- 完整消息：Typst 排版主体 + mermaid 图；思考原文以折叠块保留 -->
       <template v-else>
         <TypstDoc v-if="seg.typst.trim()" :source="seg.typst" />
         <div v-for="(d, i) in seg.diagrams" :key="`m${i}`" class="msg__diagram">
           <MermaidBlock :source="d" />
         </div>
+        <details v-if="thinking && thinking.trim()" class="msg__think-fold">
+          <summary class="msg__think-fold-sum">查看思考过程</summary>
+          <div class="msg__think-fold-body">{{ thinking }}</div>
+        </details>
       </template>
 
       <!-- 复制 raw 原文（排查排版用） -->
@@ -175,6 +179,34 @@ async function copyRaw() {
 }
 .msg__diagram {
   margin-top: 10px;
+}
+.msg__think-fold {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+}
+.msg__think-fold-sum {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 0.03em;
+}
+.msg__think-fold-sum:hover {
+  color: var(--accent);
+}
+.msg__think-fold-body {
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 16em;
+  overflow-y: auto;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
 }
 .msg__copy {
   display: block;

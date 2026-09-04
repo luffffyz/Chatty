@@ -13,7 +13,7 @@ export interface ViewMessage {
   content: string
   streaming: boolean
   failed?: boolean
-  /** 模型的推理/思考文本（reasoning_content），仅流式期间存在 */
+  /** 模型的推理/思考文本：流式期间实时增长；消息完成后以折叠块保留 */
   thinking?: string
 }
 
@@ -78,6 +78,7 @@ async function selectSession(id: string): Promise<void> {
     role: m.role === 'user' ? 'user' : 'assistant',
     content: m.content,
     streaming: false,
+    thinking: m.thinking || undefined,
   }))
 }
 
@@ -147,9 +148,16 @@ function bindEvents() {
     if (m) {
       m.streaming = false
       m.content = d.content
-      m.thinking = ''
+      // 思考文本保留在消息上：完整消息以折叠块展示（勿清空）
+      if (d.thinking) m.thinking = d.thinking
     } else {
-      state.messages.push({ key: nextKey('assistant'), role: 'assistant', content: d.content, streaming: false })
+      state.messages.push({
+        key: nextKey('assistant'),
+        role: 'assistant',
+        content: d.content,
+        streaming: false,
+        thinking: d.thinking || undefined,
+      })
     }
     state.busy = false
     loadSessions() // 刷新排序与标题

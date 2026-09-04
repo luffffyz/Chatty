@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // database/sql 驱动
@@ -33,6 +34,7 @@ type Message struct {
 	ID        int64
 	Role      Role
 	Content   string
+	Thinking  string // 模型推理/思考原文（reasoning_content），可为空
 	CreatedAt time.Time
 }
 
@@ -43,7 +45,7 @@ type Store interface {
 	GetSession(id string) (*Session, []Message, error)
 	RenameSession(id, title string) error
 	DeleteSession(id string) error
-	AppendMessage(sessionID string, role Role, content string) (Message, error)
+	AppendMessage(sessionID string, role Role, content string, thinking string) (Message, error)
 	Close() error
 }
 
@@ -76,6 +78,7 @@ func Open(path string) (*SQLiteStore, error) {
 			session_id TEXT NOT NULL,
 			role       TEXT NOT NULL,
 			content    TEXT NOT NULL,
+			thinking   TEXT NOT NULL DEFAULT '',
 			created_at INTEGER NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_messages_session
@@ -83,6 +86,13 @@ func Open(path string) (*SQLiteStore, error) {
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("chat: migrate: %w", err)
+	}
+	// 旧库升级：为已存在的 messages 表补 thinking 列（重复添加会被忽略）。
+	if _, err := db.Exec(`ALTER TABLE messages ADD COLUMN thinking TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !isDupColumn(err) {
+			db.Close()
+			return nil, fmt.Errorf("chat: add thinking column: %w", err)
+		}
 	}
 	return &SQLiteStore{db: db}, nil
 }
@@ -101,6 +111,11 @@ func newID() (string, error) {
 func unixMs(t time.Time) int64 { return t.UnixMilli() }
 func fromMs(ms int64) time.Time {
 	return time.UnixMilli(ms).UTC()
+}
+
+// isDupColumn 判断 SQLite 错误是否为“列已存在”（旧库迁移重复执行时）。
+func isDupColumn(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column name")
 }
 
 // CreateSession 新建一个空会话。
@@ -158,7 +173,7 @@ func (s *SQLiteStore) GetSession(id string) (*Session, []Message, error) {
 	ss.CreatedAt, ss.UpdatedAt = fromMs(c), fromMs(u)
 
 	rows, err := s.db.Query(
-		`SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY id`, id,
+		`SELECT id, role, content, thinking, created_at FROM messages WHERE session_id = ? ORDER BY id`, id,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("chat: list messages: %w", err)
@@ -169,7 +184,7 @@ func (s *SQLiteStore) GetSession(id string) (*Session, []Message, error) {
 		var m Message
 		var t int64
 		var role string
-		if err := rows.Scan(&m.ID, &role, &m.Content, &t); err != nil {
+		if err := rows.Scan(&m.ID, &role, &m.Content, &m.Thinking, &t); err != nil {
 			return nil, nil, fmt.Errorf("chat: scan message: %w", err)
 		}
 		m.Role, m.CreatedAt = Role(role), fromMs(t)
@@ -207,12 +222,12 @@ func (s *SQLiteStore) DeleteSession(id string) error {
 }
 
 // AppendMessage 追加一条消息并刷新会话更新时间。
-func (s *SQLiteStore) AppendMessage(sessionID string, role Role, content string) (Message, error) {
+func (s *SQLiteStore) AppendMessage(sessionID string, role Role, content string, thinking string) (Message, error) {
 	if role != RoleUser && role != RoleAssistant {
 		return Message{}, fmt.Errorf("chat: invalid role %q", role)
 	}
 	now := time.Now()
-	m := Message{Role: role, Content: content, CreatedAt: now}
+	m := Message{Role: role, Content: content, Thinking: thinking, CreatedAt: now}
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -221,8 +236,8 @@ func (s *SQLiteStore) AppendMessage(sessionID string, role Role, content string)
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
-		sessionID, string(role), content, unixMs(now),
+		`INSERT INTO messages (session_id, role, content, thinking, created_at) VALUES (?, ?, ?, ?, ?)`,
+		sessionID, string(role), content, thinking, unixMs(now),
 	)
 	if err != nil {
 		return Message{}, fmt.Errorf("chat: insert message: %w", err)

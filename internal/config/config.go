@@ -23,11 +23,20 @@ type Provider struct {
 
 // Settings 是应用设置。
 type Settings struct {
-	Providers        []Provider `json:"providers"`
-	ActiveProviderID string     `json:"activeProviderId"`
-	ActiveModel      string     `json:"activeModel"`
-	SystemPrompt     string     `json:"systemPrompt"`
-	Appearance       Appearance `json:"appearance"`
+	Providers        []Provider  `json:"providers"`
+	ActiveProviderID string      `json:"activeProviderId"`
+	ActiveModel      string      `json:"activeModel"`
+	SystemPrompt     string      `json:"systemPrompt"`
+	Appearance       Appearance  `json:"appearance"`
+	MCPServers       []MCPServer `json:"mcpServers,omitempty"`
+}
+
+// MCPServer 描述一个 MCP（Model Context Protocol）服务器。
+// 传输固定为 Streamable HTTP（JSON-RPC 2.0 over POST）。
+type MCPServer struct {
+	ID       string `json:"id"`       // 唯一标识，同时用作工具名前缀 "serverID::tool"
+	Label    string `json:"label"`    // 展示名，如 "DeepWiki"
+	Endpoint string `json:"endpoint"` // 如 "https://mcp.deepwiki.com/mcp"
 }
 
 // Appearance 是界面外观设置。

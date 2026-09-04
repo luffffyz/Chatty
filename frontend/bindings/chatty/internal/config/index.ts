@@ -3,6 +3,7 @@
 
 export type {
     Appearance,
+    MCPServer,
     Provider,
     Settings
 } from "./models.js";

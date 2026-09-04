@@ -15,6 +15,7 @@ export interface ChatDeltaEvent {
 export interface ChatDoneEvent {
     "sessionId": string;
     "content": string;
+    "thinking": string;
 }
 
 /**
@@ -41,6 +42,7 @@ export interface MessageDTO {
     "id": number;
     "role": string;
     "content": string;
+    "thinking": string;
     "createdMs": number;
 }
 

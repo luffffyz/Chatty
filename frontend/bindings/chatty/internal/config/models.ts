@@ -22,6 +22,27 @@ export interface Appearance {
 }
 
 /**
+ * MCPServer 描述一个 MCP（Model Context Protocol）服务器。
+ * 传输固定为 Streamable HTTP（JSON-RPC 2.0 over POST）。
+ */
+export interface MCPServer {
+    /**
+     * 唯一标识，同时用作工具名前缀 "serverID::tool"
+     */
+    "id": string;
+
+    /**
+     * 展示名，如 "DeepWiki"
+     */
+    "label": string;
+
+    /**
+     * 如 "https://mcp.deepwiki.com/mcp"
+     */
+    "endpoint": string;
+}
+
+/**
  * Provider 描述一个 OpenAI-compatible 后端。
  */
 export interface Provider {
@@ -61,4 +82,5 @@ export interface Settings {
     "activeModel": string;
     "systemPrompt": string;
     "appearance": Appearance;
+    "mcpServers"?: MCPServer[] | null;
 }

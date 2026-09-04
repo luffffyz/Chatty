@@ -10,8 +10,8 @@ const { state, init, send, selectSession, newSession, deleteSession } = useChat(
 const input = ref('')
 const showSettings = ref(false)
 const bodyEl = ref<HTMLElement | null>(null)
-// 思考深度(reasoning_effort): 空=不发送(low|medium|high)
-const effort = ref<'' | 'low' | 'medium' | 'high'>('')
+// 思考深度(reasoning_effort): 空=不发送(low|medium|high)；默认 low
+const effort = ref<'' | 'low' | 'medium' | 'high'>('low')
 
 async function scrollBottom() {
   await nextTick()

@@ -30,10 +30,10 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 
 	// 追加消息
-	if _, err := st.AppendMessage(s.ID, RoleUser, "hello"); err != nil {
+	if _, err := st.AppendMessage(s.ID, RoleUser, "hello", ""); err != nil {
 		t.Fatalf("AppendMessage(user): %v", err)
 	}
-	if _, err := st.AppendMessage(s.ID, RoleAssistant, "hi there"); err != nil {
+	if _, err := st.AppendMessage(s.ID, RoleAssistant, "hi there", ""); err != nil {
 		t.Fatalf("AppendMessage(assistant): %v", err)
 	}
 
@@ -96,7 +96,7 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	s, _ := st.CreateSession("keep me")
-	_, _ = st.AppendMessage(s.ID, RoleUser, "persisted")
+	_, _ = st.AppendMessage(s.ID, RoleUser, "persisted", "")
 	st.Close()
 
 	st2, err := Open(path)
@@ -116,7 +116,7 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 func TestInvalidRoleRejected(t *testing.T) {
 	st := openTestStore(t)
 	s, _ := st.CreateSession("t")
-	if _, err := st.AppendMessage(s.ID, Role("bogus"), "x"); err == nil {
+	if _, err := st.AppendMessage(s.ID, Role("bogus"), "x", ""); err == nil {
 		t.Fatal("expected error for invalid role")
 	}
 }
