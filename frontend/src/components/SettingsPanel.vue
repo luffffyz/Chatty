@@ -462,7 +462,7 @@ onMounted(syncFromSettings)
       <template v-else-if="tab === 'mcp'">
         <p class="hint">
           配置 MCP 服务器（Streamable HTTP，JSON-RPC over POST）。配置后，模型在需要时可调用这些
-          服务器暴露的工具——工具名形如 <code>serverID::tool</code>。仅当前 provider 支持函数调用时生效。
+          服务器暴露的工具——工具名形如 <code>serverID_tool</code>（仅字母/数字/_-，由程序拼接）。仅当前 provider 支持函数调用时生效。
         </p>
 
         <div class="plist">

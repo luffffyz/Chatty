@@ -34,7 +34,7 @@ type Settings struct {
 // MCPServer 描述一个 MCP（Model Context Protocol）服务器。
 // 传输固定为 Streamable HTTP（JSON-RPC 2.0 over POST）。
 type MCPServer struct {
-	ID       string `json:"id"`       // 唯一标识，同时用作工具名前缀 "serverID::tool"
+	ID       string `json:"id"`       // 唯一标识；暴露给模型时工具名形如 "serverID_tool"
 	Label    string `json:"label"`    // 展示名，如 "DeepWiki"
 	Endpoint string `json:"endpoint"` // 如 "https://mcp.deepwiki.com/mcp"
 	// APIKey 可选：非空时以 "Authorization: Bearer <key>" 发送（无鉴权留空）。

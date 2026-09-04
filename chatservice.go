@@ -326,7 +326,7 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 // ---------- MCP 工具集成 ----------
 
 // mcpKit 是本轮对话所用 MCP 服务器的快照：按 endpoint 复用客户端，
-// 工具统一暴露为 "serverID::toolName"，避免跨服务器同名冲突。
+// 工具统一暴露为 "serverID_toolName"（仅 [a-zA-Z0-9_-]），避免跨服务器同名冲突。
 type mcpKit struct {
 	clients  map[string]*mcp.Client // serverID -> client
 	byName   map[string]mcpToolRef  // 完整工具名 -> 引用
@@ -359,7 +359,9 @@ func (s *ChatService) mcpKit(ctx context.Context) *mcpKit {
 		}
 		kit.clients[sv.ID] = cl
 		for _, t := range tools {
-			name := sv.ID + "::" + t.Name
+			// OpenAI 兼容端点要求 tools[].function.name 匹配 ^[a-zA-Z0-9_-]+$，
+			// 用 "_" 连接 serverID 与转义后的工具名（serverID 恒为字母数字）。
+			name := sv.ID + "_" + safeToolName(t.Name)
 			params := t.InputSchema
 			if len(params) == 0 {
 				params = json.RawMessage(`{"type":"object","properties":{}}`)
@@ -423,6 +425,24 @@ func labelOr(label, id string) string {
 		return trimSpace(label)
 	}
 	return id
+}
+
+// safeToolName 把 MCP 工具名转成 OpenAI 兼容端点接受的名字
+// （仅 [a-zA-Z0-9_-]；非法字符替换为 _）。
+func safeToolName(name string) string {
+	if name == "" {
+		return "tool"
+	}
+	var b strings.Builder
+	for _, r := range name {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-'
+		if ok {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 func (s *ChatService) activeProvider() *config.Provider {
