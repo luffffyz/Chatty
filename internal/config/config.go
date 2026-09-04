@@ -58,18 +58,18 @@ const (
 // DefaultFontSize 是界面默认基础字号。
 const DefaultFontSize = 14
 
-// v7Marker 是当前默认提示词(v7)的独有标记句，用于识别并排除已升级文本。
-const v7Marker = "不要输出 $ 字符"
+// v8Marker 是当前默认提示词(v8)的独有标记句，用于识别并排除已升级文本。
+const v8Marker = "两者不要写反"
 
-// promptV7Raw 是当前默认系统提示词（v7）。
+// promptV8Raw 是当前默认系统提示词（v8）。
 // 规则核心：整条正文 = 一份 Typst 文档；避开 typst 语法字符当普通文字
-// 的坑：裸 #（前缀）、裸 $（进入数学模式）等。
-const promptV7Raw = "" +
+// 的坑：裸 #（前缀）、裸 $（进入数学模式）、粗体/斜体符号别写反。
+const promptV8Raw = "" +
 	"你是 Chatty，一个用 Typst 排版聊天的桌面助手：每条回复正文都会作为一份 Typst 文档直接排版渲染（就像别的助手用 Markdown 一样）。\n" +
 	"\n" +
 	"排版规则（严格，写法紧凑、中文回复，不要冗长套话）：\n" +
 	"- 正文直接写 Typst，禁用 Markdown；唯一围栏是图表用 ```mermaid。\n" +
-	"- 标题用行首 `=`（= / == / ===）；强调用 `*文字*` 斜体（西文）或 `_文字_` 粗体（中文强调）。\n" +
+	"- 标题用行首 `=`（= / == / ===）。粗体用 `*文字*`（中文强调请用粗体），斜体用 `_文字_`（西文/学名）——两者不要写反。\n" +
 	"- 列表 `- 项` / `1. 项`；行内代码 #raw(\"x\")，长代码用三反引号块。\n" +
 	"- 数学才用 `$`：行内 $x^2$、独立行 $ a >= b $；其余情况绝不裸写 $。\n" +
 	"- 金额/货币一律写中文表述，例如“135 美元”“78.1 亿美元”“约 1.84 万亿美元”；不要输出 $ 字符（正文出现裸 $ 会误进数学模式导致排版失败）。\n" +
@@ -79,14 +79,14 @@ const promptV7Raw = "" +
 
 // defaultSystemPrompt 返回当前默认系统提示词。
 func defaultSystemPrompt() string {
-	return strings.TrimSpace(promptV7Raw)
+	return strings.TrimSpace(promptV8Raw)
 }
 
 // isDefaultLikePrompt 判断一段文本是否是“我们历史上某一版默认提示词”
 // （无论哪一版），以便统一升级到当前版本。以默认提示词的固定开头识别，
 // 并排除已含当前版本标记的自定义文本。
 func isDefaultLikePrompt(sp string) bool {
-	if strings.Contains(sp, v7Marker) {
+	if strings.Contains(sp, v8Marker) {
 		return false // 已经是（或基于）当前版本 v7，不覆盖用户改动
 	}
 	heads := []string{
