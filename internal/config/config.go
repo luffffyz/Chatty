@@ -37,6 +37,8 @@ type MCPServer struct {
 	ID       string `json:"id"`       // 唯一标识，同时用作工具名前缀 "serverID::tool"
 	Label    string `json:"label"`    // 展示名，如 "DeepWiki"
 	Endpoint string `json:"endpoint"` // 如 "https://mcp.deepwiki.com/mcp"
+	// APIKey 可选：非空时以 "Authorization: Bearer <key>" 发送（无鉴权留空）。
+	APIKey string `json:"apiKey,omitempty"`
 }
 
 // Appearance 是界面外观设置。

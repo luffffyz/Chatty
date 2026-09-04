@@ -48,18 +48,20 @@ type rpcResult struct {
 // Client 是一个 Streamable HTTP MCP 客户端。
 type Client struct {
 	Endpoint string // MCP 端点 URL（形如 https://host/mcp）
+	APIKey   string // 非空时每次请求带 Authorization: Bearer
 	http     *http.Client
 
-	initMu      chan struct{} // 串行化 initialize（并发安全用轻量方式见下）
+	initMu      chan struct{} // 串行化 initialize
 	sessionID   string
 	initialized bool
 }
 
 // New 构造客户端；endpoint 为 MCP 服务器根 URL（不含 method）。
-// 超时由调用方的 context 控制。
-func New(endpoint string) *Client {
+// apiKey 非空时以 Bearer 认证发送；超时由调用方的 context 控制。
+func New(endpoint, apiKey string) *Client {
 	return &Client{
 		Endpoint: strings.TrimRight(endpoint, "/"),
+		APIKey:   apiKey,
 		http:     http.DefaultClient,
 		initMu:   make(chan struct{}, 1),
 	}
@@ -106,6 +108,9 @@ func (c *Client) post(ctx context.Context, req *rpcRequest, out *rpcResult) erro
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json, text/event-stream")
+	if c.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
 	if c.sessionID != "" {
 		httpReq.Header.Set("Mcp-Session-Id", c.sessionID)
 	}

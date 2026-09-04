@@ -246,18 +246,20 @@ async function saveProvider() {
 
 // ---------- MCP 服务器管理（Streamable HTTP） ----------
 const mcpList = computed(() => state.settings?.mcpServers ?? [])
-const mform = reactive({ label: '', endpoint: '' })
+const mform = reactive({ label: '', endpoint: '', apiKey: '' })
 const editingMCP = ref('')
 
 function mcpReset() {
   editingMCP.value = ''
   mform.label = ''
   mform.endpoint = ''
+  mform.apiKey = ''
 }
 function mcpEdit(m: MCPServer) {
   editingMCP.value = m.id
   mform.label = m.label ?? ''
   mform.endpoint = m.endpoint ?? ''
+  mform.apiKey = m.apiKey ?? ''
 }
 function genMCPServerID(): string {
   return 'mcp' + Date.now().toString(36)
@@ -271,7 +273,12 @@ async function saveMCP() {
   const next = cloneBase()
   const list = next.mcpServers ?? []
   const id = editingMCP.value || genMCPServerID()
-  const server: MCPServer = { id, label: mform.label.trim(), endpoint: mform.endpoint.trim() }
+  const server: MCPServer = {
+    id,
+    label: mform.label.trim(),
+    endpoint: mform.endpoint.trim(),
+    apiKey: mform.apiKey.trim(),
+  }
   const idx = list.findIndex((x) => x.id === id)
   if (idx >= 0) list[idx] = server
   else list.push(server)
@@ -484,6 +491,11 @@ onMounted(syncFromSettings)
         <label class="field">
           <span>Endpoint（Streamable HTTP）</span>
           <input v-model="mform.endpoint" type="text" placeholder="https://…/mcp" />
+        </label>
+        <label class="field">
+          <span>API Key（可选）</span>
+          <input v-model="mform.apiKey" type="password" placeholder="Bearer token，无需鉴权可留空" />
+          <span class="hint">非空时以 Authorization: Bearer 发送给该服务器。</span>
         </label>
 
         <div class="row">

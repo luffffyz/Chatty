@@ -82,7 +82,7 @@ func writeReply(w http.ResponseWriter, payload string, sse bool) {
 func TestClientListAndCall(t *testing.T) {
 	for _, sse := range []bool{false, true} {
 		sv := testServer(t, sse)
-		c := New(sv.URL + "/mcp")
+		c := New(sv.URL+"/mcp", "")
 		ctx := context.Background()
 
 		tools, err := c.ListTools(ctx)
@@ -109,7 +109,7 @@ func TestClientHTTPError(t *testing.T) {
 		http.Error(w, `{"error":{"message":"denied"}}`, http.StatusForbidden)
 	}))
 	defer sv.Close()
-	c := New(sv.URL)
+	c := New(sv.URL, "")
 	if _, err := c.ListTools(context.Background()); err == nil {
 		t.Fatal("expected error for 403")
 	}

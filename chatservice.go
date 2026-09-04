@@ -351,7 +351,7 @@ func (s *ChatService) mcpKit(ctx context.Context) *mcpKit {
 		if ep == "" || trimSpace(sv.ID) == "" {
 			continue
 		}
-		cl := s.mcpClientFor(ep)
+		cl := s.mcpClientFor(ep, trimSpace(sv.APIKey))
 		tools, err := cl.ListTools(ctx)
 		if err != nil {
 			kit.warnings = append(kit.warnings, fmt.Sprintf("「%s」连接失败: %v", labelOr(sv.Label, sv.ID), err))
@@ -405,15 +405,16 @@ func (s *ChatService) execTool(ctx context.Context, kit *mcpKit, tc llm.ToolCall
 	return res.Content, nil
 }
 
-// mcpClientFor 按 endpoint 返回缓存的 MCP 客户端。
-func (s *ChatService) mcpClientFor(endpoint string) *mcp.Client {
+// mcpClientFor 按 endpoint+apiKey 返回缓存的 MCP 客户端（key 变化即重建）。
+func (s *ChatService) mcpClientFor(endpoint, apiKey string) *mcp.Client {
+	key := endpoint + "\x00" + apiKey
 	s.mcpMu.Lock()
 	defer s.mcpMu.Unlock()
-	if cl, ok := s.mcpClients[endpoint]; ok {
+	if cl, ok := s.mcpClients[key]; ok {
 		return cl
 	}
-	cl := mcp.New(endpoint)
-	s.mcpClients[endpoint] = cl
+	cl := mcp.New(endpoint, apiKey)
+	s.mcpClients[key] = cl
 	return cl
 }
 

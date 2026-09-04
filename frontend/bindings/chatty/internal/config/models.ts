@@ -40,6 +40,11 @@ export interface MCPServer {
      * 如 "https://mcp.deepwiki.com/mcp"
      */
     "endpoint": string;
+
+    /**
+     * APIKey 可选：非空时以 "Authorization: Bearer <key>" 发送（无鉴权留空）。
+     */
+    "apiKey"?: string;
 }
 
 /**
