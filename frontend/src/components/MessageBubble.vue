@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Clipboard } from '@wailsio/runtime'
-import { splitTypstMessage } from '../lib/blocks'
+import { splitDocParts } from '../lib/blocks'
+import type { DocPart } from '../lib/blocks'
 import TypstDoc from './TypstDoc.vue'
 import MermaidBlock from './MermaidBlock.vue'
 import type { ChatRole } from '../types'
@@ -19,10 +20,12 @@ const props = defineProps<{
 const emit = defineEmits<{ delete: [] }>()
 
 const isUser = computed(() => props.role === 'user')
-
-// assistant 消息 = 一段 Typst 排版 + 若干 mermaid 图（流式完成后再编译）
-const seg = computed(() =>
-  props.role === 'assistant' && !props.streaming ? splitTypstMessage(props.content) : null,
+const hasText = computed(() => props.content.trim().length > 0)
+/** 消息已结束（非流式）：显示思考折叠块、隐藏行尾光标 */
+const whole = computed(() => props.role === 'assistant' && !props.streaming)
+/** 分段：每段独立 Typst 排版 / mermaid；未闭合段(流式中)先显示原文 */
+const parts = computed<DocPart[]>(() =>
+  props.role === 'assistant' ? splitDocParts(props.content, !props.streaming) : [],
 )
 
 const copied = ref(false)
@@ -52,8 +55,8 @@ async function copyRaw() {
         <pre class="msg__plain">{{ content }}</pre>
       </template>
 
-      <!-- 流式中/出错 -->
-      <template v-else-if="!seg">
+      <!-- assistant 尚无正文：思考中/等待/请求失败 -->
+      <template v-else-if="!hasText">
         <!-- 有真实 thinking 文本才展示"思考中"；否则低调等待 -->
         <div v-if="streaming && !content" class="msg__wait">
           <template v-if="thinking && thinking.trim()">
@@ -62,19 +65,32 @@ async function copyRaw() {
           </template>
           <span v-else class="msg__dots"><i></i><i></i><i></i></span>
         </div>
-        <template v-else>
-          <pre class="msg__plain"><span>{{ content }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
-          <p v-if="failed && !content" class="msg__failed">请求失败，请检查设置或网络。</p>
-        </template>
+        <p v-if="failed && !content" class="msg__failed">请求失败，请检查设置或网络。</p>
       </template>
 
-      <!-- 完整消息：Typst 排版主体 + mermaid 图；思考原文以折叠块保留 -->
+      <!-- assistant 正文：逐段独立排版（text/code → TypstDoc，mermaid → MermaidBlock） -->
       <template v-else>
-        <TypstDoc v-if="seg.typst.trim()" :source="seg.typst" />
-        <div v-for="(d, i) in seg.diagrams" :key="`m${i}`" class="msg__diagram">
-          <MermaidBlock :source="d" />
-        </div>
-        <details v-if="thinking && thinking.trim()" class="msg__think-fold">
+        <!-- 兜底：分词器异常时原样显示，绝不空泡 -->
+        <pre v-if="!parts.length" class="msg__plain"><span>{{ content }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
+
+        <template v-for="(p, pi) in parts" :key="p.kind === 'mermaid' ? `m${pi}` : `${pi}:${p.text.slice(0, 32)}`">
+          <!-- mermaid 图 -->
+          <div v-if="p.kind === 'mermaid'" class="msg__diagram">
+            <MermaidBlock v-if="p.stable" :source="p.text" />
+            <pre v-else class="msg__plain"><span>{{ p.text }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
+          </div>
+
+          <!-- text / raw 代码段：闭合段独立排版；未闭合段(流式中)先显示原文 -->
+          <div v-else class="msg__seg">
+            <TypstDoc v-if="p.stable" :source="p.text" :label="String(pi + 1)" />
+            <pre v-else class="msg__plain"><span>{{ p.text }}</span><span v-if="streaming" class="msg__cursor">▍</span></pre>
+          </div>
+        </template>
+
+        <p v-if="failed" class="msg__failed">请求失败，请检查设置或网络。</p>
+
+        <!-- 完整消息的思考原文折叠保留 -->
+        <details v-if="whole && thinking && thinking.trim()" class="msg__think-fold">
           <summary class="msg__think-fold-sum">查看思考过程</summary>
           <div class="msg__think-fold-body">{{ thinking }}</div>
         </details>
@@ -192,6 +208,14 @@ async function copyRaw() {
 }
 .msg__diagram {
   margin-top: 10px;
+}
+.msg__seg {
+  width: 100%;
+}
+.msg__seg + .msg__seg,
+.msg__seg + .msg__diagram,
+.msg__diagram + .msg__seg {
+  margin-top: 8px;
 }
 .msg__think-fold {
   margin-top: 10px;

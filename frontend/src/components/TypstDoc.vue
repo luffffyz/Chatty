@@ -7,7 +7,11 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { renderTypst } from '../lib/typst'
 import { textHex, view } from '../theme'
 
-const props = defineProps<{ source: string }>()
+const props = defineProps<{
+  source: string
+  /** 段序号（如 "3"），渲染失败时用于定位该段 */
+  label?: string
+}>()
 
 const svg = ref('')
 const pending = ref(false)
@@ -85,10 +89,12 @@ onBeforeUnmount(() => {
     <div v-if="svg" class="doc__svg" :style="{ '--tsw': displayW + 'px' }" v-html="svg"></div>
     <!-- 编译中 -->
     <div v-else-if="pending" class="doc__pending">排版中…</div>
-    <!-- 任何失败/异常状态都回退原文，绝不出现空泡 -->
+    <!-- 任何失败/异常状态都回退原文，绝不出现空泡；标注段号便于定位 -->
     <div v-else class="doc__fallback">
       <pre class="doc__raw">{{ source }}</pre>
-      <p v-if="error" class="doc__err">⚠ Typst 渲染失败：{{ error }}</p>
+      <p v-if="error" class="doc__err">
+        ⚠ Typst 渲染失败<template v-if="label">（第 {{ label }} 段）</template>：{{ error }}
+      </p>
     </div>
   </div>
 </template>
