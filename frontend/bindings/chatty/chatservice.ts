@@ -29,6 +29,13 @@ export function AttachLogger(l: slog$0.Logger | null): $CancellablePromise<void>
 }
 
 /**
+ * DeleteMessage 删除会话内一条已保存消息（生成中禁止）。
+ */
+export function DeleteMessage(sessionID: string, id: number): $CancellablePromise<void> {
+    return $Call.ByID(952005815, sessionID, id);
+}
+
+/**
  * DeleteSession 删除会话。
  */
 export function DeleteSession(sessionID: string): $CancellablePromise<void> {
@@ -80,10 +87,10 @@ export function SaveSettings(st: config$0.Settings | null): $CancellablePromise<
 /**
  * SendMessage 把用户消息追加到会话并异步流式请求模型。
  * effort 取值 ""|"low"|"medium"|"high"，作为 reasoning_effort 透传。
- * useTools 为 true 时把已配置的 MCP 工具随请求提供给模型。
+ * tools 为本次允许使用的 MCP 服务器 ID 列表；空表示不带任何工具。
  * 返回错误表示同步失败（会话不存在 / 正忙 / 未配置）；流式期间的
  * 增量/结束/错误通过 chat:delta / chat:done / chat:error 事件推送。
  */
-export function SendMessage(sessionID: string, text: string, effort: string, useTools: boolean): $CancellablePromise<void> {
-    return $Call.ByID(1063940756, sessionID, text, effort, useTools);
+export function SendMessage(sessionID: string, text: string, effort: string, tools: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(1063940756, sessionID, text, effort, tools);
 }

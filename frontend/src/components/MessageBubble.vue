@@ -12,7 +12,11 @@ const props = defineProps<{
   streaming?: boolean
   failed?: boolean
   thinking?: string
+  /** 有数据库 id（已持久化）时显示删除按钮 */
+  deletable?: boolean
 }>()
+
+const emit = defineEmits<{ delete: [] }>()
 
 const isUser = computed(() => props.role === 'user')
 
@@ -36,6 +40,14 @@ async function copyRaw() {
 <template>
   <div class="msg" :class="isUser ? 'msg--user' : 'msg--assistant'">
     <div class="msg__bubble" :class="{ 'msg__bubble--failed': failed }">
+      <button
+        v-if="deletable && !streaming"
+        class="msg__del"
+        title="删除这条消息"
+        @click="emit('delete')"
+      >
+        ✕
+      </button>
       <template v-if="isUser">
         <pre class="msg__plain">{{ content }}</pre>
       </template>
@@ -88,6 +100,7 @@ async function copyRaw() {
   justify-content: flex-start;
 }
 .msg__bubble {
+  position: relative;
   max-width: 92%;
   min-width: 0;
   border-radius: 12px;
@@ -207,6 +220,28 @@ async function copyRaw() {
   overflow-y: auto;
   border-left: 2px solid var(--border);
   padding-left: 8px;
+}
+.msg__del {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.msg:hover .msg__del {
+  opacity: 1;
+}
+.msg__del:hover {
+  color: var(--danger);
+  background: var(--surface-hover);
 }
 .msg__copy {
   display: block;

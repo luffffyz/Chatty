@@ -45,6 +45,7 @@ type Store interface {
 	GetSession(id string) (*Session, []Message, error)
 	RenameSession(id, title string) error
 	DeleteSession(id string) error
+	DeleteMessage(sessionID string, id int64) error
 	AppendMessage(sessionID string, role Role, content string, thinking string) (Message, error)
 	Close() error
 }
@@ -217,6 +218,18 @@ func (s *SQLiteStore) DeleteSession(id string) error {
 	}
 	if _, err := s.db.Exec(`DELETE FROM sessions WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("chat: delete session: %w", err)
+	}
+	return nil
+}
+
+// DeleteMessage 删除会话内的单条消息（id 为该消息在 messages 表中的主键）。
+func (s *SQLiteStore) DeleteMessage(sessionID string, id int64) error {
+	res, err := s.db.Exec(`DELETE FROM messages WHERE id = ? AND session_id = ?`, id, sessionID)
+	if err != nil {
+		return fmt.Errorf("chat: delete message: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("chat: message %d not found in session %q", id, sessionID)
 	}
 	return nil
 }

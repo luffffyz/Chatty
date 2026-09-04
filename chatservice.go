@@ -143,6 +143,17 @@ func (s *ChatService) DeleteSession(sessionID string) error {
 	return s.store.DeleteSession(sessionID)
 }
 
+// DeleteMessage 删除会话内一条已保存消息（生成中禁止）。
+func (s *ChatService) DeleteMessage(sessionID string, id int64) error {
+	s.mu.Lock()
+	busy := s.busy[sessionID]
+	s.mu.Unlock()
+	if busy {
+		return errors.New("该会话正在生成中，不能删除消息")
+	}
+	return s.store.DeleteMessage(sessionID, id)
+}
+
 // GetSettings 返回当前设置副本。
 func (s *ChatService) GetSettings() (*config.Settings, error) {
 	cp := *s.settings
@@ -192,10 +203,10 @@ func (s *ChatService) logf(msg string, args ...any) {
 
 // SendMessage 把用户消息追加到会话并异步流式请求模型。
 // effort 取值 ""|"low"|"medium"|"high"，作为 reasoning_effort 透传。
-// useTools 为 true 时把已配置的 MCP 工具随请求提供给模型。
+// tools 为本次允许使用的 MCP 服务器 ID 列表；空表示不带任何工具。
 // 返回错误表示同步失败（会话不存在 / 正忙 / 未配置）；流式期间的
 // 增量/结束/错误通过 chat:delta / chat:done / chat:error 事件推送。
-func (s *ChatService) SendMessage(sessionID, text, effort string, useTools bool) error {
+func (s *ChatService) SendMessage(sessionID, text, effort string, tools []string) error {
 	switch effort {
 	case "", "low", "medium", "high":
 	default:
@@ -217,13 +228,13 @@ func (s *ChatService) SendMessage(sessionID, text, effort string, useTools bool)
 		"session", sessionID,
 		"model", s.settings.ActiveModel,
 		"effort", effort,
-		"useTools", useTools,
+		"toolServers", tools,
 		"text", firstRunes(text, 60))
-	go s.runCompletion(sessionID, text, effort, useTools)
+	go s.runCompletion(sessionID, text, effort, tools)
 	return nil
 }
 
-func (s *ChatService) runCompletion(sessionID, text, effort string, useTools bool) {
+func (s *ChatService) runCompletion(sessionID, text, effort string, toolServers []string) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.busy, sessionID)
@@ -278,10 +289,10 @@ func (s *ChatService) runCompletion(sessionID, text, effort string, useTools boo
 		s.emitter.Emit("chat:thinking", ChatThinkingEvent{SessionID: sessionID, Text: t})
 	}
 
-	// MCP 工具集合（此完成周期的固定快照；开关关闭时为 nil）
+	// MCP 工具集合（此完成周期的固定快照；仅含勾选启用的服务器）
 	var kit *mcpKit
-	if useTools {
-		kit = s.mcpKit(ctx)
+	if len(toolServers) > 0 {
+		kit = s.mcpKit(ctx, toolServers)
 		for _, w := range kit.warnings {
 			emitThink("[MCP] " + w + "\n")
 			s.logf("MCP warning", "session", sessionID, "warning", w)
@@ -386,14 +397,22 @@ type mcpToolRef struct {
 	toolName string
 }
 
-// mcpKit 从当前设置构建工具快照；单台服务器连不上只记 warning，不阻塞聊天。
-func (s *ChatService) mcpKit(ctx context.Context) *mcpKit {
+// mcpKit 从当前设置构建工具快照，仅纳入 allowed 里出现的服务器；
+// 单台服务器连不上只记 warning，不阻塞聊天。
+func (s *ChatService) mcpKit(ctx context.Context, allowed []string) *mcpKit {
 	kit := &mcpKit{
 		clients: map[string]*mcp.Client{},
 		byName:  map[string]mcpToolRef{},
 	}
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, id := range allowed {
+		allowedSet[id] = true
+	}
 	for i := range s.settings.MCPServers {
 		sv := &s.settings.MCPServers[i]
+		if !allowedSet[sv.ID] {
+			continue
+		}
 		ep := trimSpace(sv.Endpoint)
 		if ep == "" || trimSpace(sv.ID) == "" {
 			continue

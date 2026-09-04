@@ -1,19 +1,47 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import MessageBubble from './components/MessageBubble.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import { useChat } from './chat'
 import { applyAppearance } from './theme'
 
-const { state, init, send, selectSession, newSession, deleteSession } = useChat()
+const { state, init, send, selectSession, newSession, deleteSession, removeMessage } = useChat()
 
 const input = ref('')
 const showSettings = ref(false)
 const bodyEl = ref<HTMLElement | null>(null)
-// 思考深度(reasoning_effort): 空=不发送(low|medium|high)；默认 low
+
+// ---- 思考深度列表 ----
+const EFFORT_OPTIONS = [
+  { v: '', label: '关' },
+  { v: 'low', label: '低' },
+  { v: 'medium', label: '中' },
+  { v: 'high', label: '高' },
+]
 const effort = ref<'' | 'low' | 'medium' | 'high'>('low')
-// MCP 工具开关：默认开；关闭时请求不带任何工具
-const mcpOn = ref(true)
+
+// ---- MCP 服务器列表(可多选, 逐个开/关) ----
+const mcpPop = ref(false)
+const mcpServers = computed(() => state.settings?.mcpServers ?? [])
+const mcpEnabled = reactive<Record<string, boolean>>({})
+const enabledServers = computed(() => mcpServers.value.filter((s) => mcpEnabled[s.id] !== false).map((s) => s.id))
+
+function isMCPOn(s: { id: string }): boolean {
+  return mcpEnabled[s.id] !== false
+}
+function toggleMCP(s: { id: string }) {
+  mcpEnabled[s.id] = isMCPOn(s) ? false : true
+}
+// 配置变化后补齐新服务器(默认开), 保留用户已有勾选
+watch(
+  () => state.settings?.mcpServers?.map((s) => s.id).join(','),
+  () => {
+    for (const s of state.settings?.mcpServers ?? []) {
+      if (mcpEnabled[s.id] === undefined) mcpEnabled[s.id] = true
+    }
+  },
+  { immediate: true },
+)
 
 async function scrollBottom() {
   await nextTick()
@@ -40,11 +68,8 @@ watch(
 function submit() {
   const text = input.value
   input.value = ''
-  send(text, effort.value, mcpOn.value)
-}
-
-function pickEffort(v: string) {
-  effort.value = (v as '' | 'low' | 'medium' | 'high')
+  mcpPop.value = false
+  send(text, effort.value, enabledServers.value)
 }
 
 function onDelete(id: string) {
@@ -95,6 +120,8 @@ function fmtTime(ms: number): string {
             :streaming="m.streaming"
             :failed="m.failed"
             :thinking="m.thinking"
+            :deletable="typeof m.id === 'number'"
+            @delete="removeMessage(m)"
           />
         </template>
         <div v-else class="empty">
@@ -104,34 +131,38 @@ function fmtTime(ms: number): string {
       </div>
 
       <footer class="composer">
-        <div class="composer__effort" title="思考深度（reasoning_effort，非推理模型忽略）">
-          <span class="composer__effort-label">思考</span>
-          <button
-            v-for="opt in [
-              { v: '', label: '关' },
-              { v: 'low', label: '低' },
-              { v: 'medium', label: '中' },
-              { v: 'high', label: '高' },
-            ]"
-            :key="String(opt.v)"
-            type="button"
-            class="effort-chip"
-            :class="{ 'effort-chip--on': effort === opt.v }"
-            :disabled="state.busy"
-            @click="pickEffort(opt.v)"
-          >
-            {{ opt.label }}
-          </button>
-          <span class="composer__effort-sep"></span>
-          <button
-            type="button"
-            class="effort-chip"
-            :class="{ 'effort-chip--on': mcpOn }"
-            :title="mcpOn ? 'MCP 工具已开启' : 'MCP 工具已关闭'"
-            @click="mcpOn = !mcpOn"
-          >
-            MCP {{ mcpOn ? '开' : '关' }}
-          </button>
+        <div class="composer__tools">
+          <label class="composer__ctl">
+            <span class="composer__ctl-label">思考</span>
+            <select v-model="effort" class="composer__select" :disabled="state.busy">
+              <option v-for="opt in EFFORT_OPTIONS" :key="String(opt.v)" :value="opt.v">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+
+          <div class="composer__mcp">
+            <button
+              type="button"
+              class="composer__mcp-btn"
+              :class="{ 'composer__mcp-btn--on': enabledServers.length > 0 }"
+              :disabled="state.busy"
+              @click.stop="mcpPop = !mcpPop"
+            >
+              MCP{{ enabledServers.length > 0 ? ` ×${enabledServers.length}` : '' }}
+            </button>
+            <div v-if="mcpPop" class="mcp-pop" @click.stop>
+              <div class="mcp-pop__head">MCP 服务器</div>
+              <label v-for="s in mcpServers" :key="s.id" class="mcp-pop__row">
+                <input type="checkbox" :checked="isMCPOn(s)" @change="toggleMCP(s)" />
+                <span class="mcp-pop__name">{{ s.label || s.id }}</span>
+              </label>
+              <p v-if="!mcpServers.length" class="mcp-pop__empty">未配置 MCP 服务器（设置 → MCP）</p>
+              <div class="mcp-pop__foot">
+                <button type="button" @click="mcpPop = false">完成</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="composer__row">
           <textarea
@@ -297,17 +328,42 @@ function fmtTime(ms: number): string {
   border-top: 1px solid var(--border);
   background: var(--bg-side);
 }
-.composer__effort {
+.composer__tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+  padding-bottom: 2px;
 }
-.composer__effort-label {
+.composer__ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.composer__ctl-label {
   font-size: var(--fs-xs);
   color: var(--text-faint);
-  margin-right: 4px;
 }
-.effort-chip {
+.composer__select {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 6px;
+  cursor: pointer;
+  outline: none;
+}
+.composer__select:focus {
+  border-color: var(--accent);
+}
+.composer__select:disabled {
+  opacity: 0.6;
+}
+.composer__mcp {
+  position: relative;
+  display: inline-block;
+}
+.composer__mcp-btn {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-dim);
@@ -317,20 +373,75 @@ function fmtTime(ms: number): string {
   cursor: pointer;
   line-height: 1.6;
 }
-.effort-chip--on {
+.composer__mcp-btn--on {
   border-color: var(--accent);
   background: var(--accent-weak);
   color: var(--accent);
 }
-.composer__effort-sep {
-  width: 1px;
-  height: 14px;
-  background: var(--border);
-  margin: 0 4px;
-}
-.effort-chip:disabled {
+.composer__mcp-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.mcp-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  min-width: 220px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+}
+.mcp-pop__head {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.mcp-pop__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.mcp-pop__row:hover {
+  background: var(--surface-hover);
+}
+.mcp-pop__row input {
+  accent-color: var(--accent);
+}
+.mcp-pop__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-pop__empty {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  padding: 6px;
+}
+.mcp-pop__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.mcp-pop__foot button {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  padding: 2px 6px;
 }
 .composer__row {
   display: flex;

@@ -13,6 +13,8 @@ export interface ViewMessage {
   content: string
   streaming: boolean
   failed?: boolean
+  /** 已持久化消息的数据库 id；流式占位消息为 undefined */
+  id?: number
   /** 模型的推理/思考文本：流式期间实时增长；消息完成后以折叠块保留 */
   thinking?: string
 }
@@ -78,6 +80,7 @@ async function selectSession(id: string): Promise<void> {
     role: m.role === 'user' ? 'user' : 'assistant',
     content: m.content,
     streaming: false,
+    id: m.id,
     thinking: m.thinking || undefined,
   }))
 }
@@ -99,7 +102,22 @@ async function deleteSession(id: string) {
   }
 }
 
-async function send(text: string, effort = '', useTools = true): Promise<void> {
+// removeMessage 删除当前会话内一条已持久化的消息。
+async function removeMessage(m: ViewMessage): Promise<void> {
+  if (!m.id || m.streaming) return
+  if (state.busy) {
+    setBanner('正在生成中，不能删除消息')
+    return
+  }
+  try {
+    await ChatService.DeleteMessage(state.currentId, m.id)
+    state.messages = state.messages.filter((x) => x.key !== m.key)
+  } catch (e) {
+    setBanner(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function send(text: string, effort = '', useServers: string[] = []): Promise<void> {
   const content = text.trim()
   if (!content || state.busy) return
   if (!state.currentId) {
@@ -124,7 +142,7 @@ async function send(text: string, effort = '', useTools = true): Promise<void> {
   state.messages.push(placeholder)
 
   try {
-    await ChatService.SendMessage(state.currentId, content, effort, useTools)
+    await ChatService.SendMessage(state.currentId, content, effort, useServers)
   } catch (e) {
     placeholder.streaming = false
     placeholder.failed = true
@@ -215,6 +233,7 @@ export function useChat() {
     selectSession,
     newSession,
     deleteSession,
+    removeMessage,
     saveSettings,
   }
 }

@@ -113,7 +113,7 @@ func TestSendMessageStreamsAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)
 	}
-	if err := svc.SendMessage(s.ID, "解释欧拉恒等式", "", true); err != nil {
+	if err := svc.SendMessage(s.ID, "解释欧拉恒等式", "", []string{}); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	waitDone(t, em)
@@ -171,7 +171,7 @@ func TestSendMessageWithoutProviderEmitsError(t *testing.T) {
 	svc := NewChatService(st, cfg, filepath.Join(t.TempDir(), "s.json"), em)
 
 	s, _ := st.CreateSession("")
-	if err := svc.SendMessage(s.ID, "hi", "", false); err != nil {
+	if err := svc.SendMessage(s.ID, "hi", "", nil); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	// 该路径没有 chat:done，轮询 chat:error
@@ -190,10 +190,10 @@ func TestSendMessageWithoutProviderEmitsError(t *testing.T) {
 func TestSendMessageConcurrentSendRejected(t *testing.T) {
 	svc, _, _, st := newTestService(t)
 	s, _ := st.CreateSession("")
-	if err := svc.SendMessage(s.ID, "first", "", true); err != nil {
+	if err := svc.SendMessage(s.ID, "first", "", []string{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.SendMessage(s.ID, "second", "", true); err == nil {
+	if err := svc.SendMessage(s.ID, "second", "", []string{}); err == nil {
 		t.Error("second concurrent SendMessage should be rejected")
 	}
 }
