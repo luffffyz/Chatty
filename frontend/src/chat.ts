@@ -99,7 +99,7 @@ async function deleteSession(id: string) {
   }
 }
 
-async function send(text: string, effort = ''): Promise<void> {
+async function send(text: string, effort = '', useTools = true): Promise<void> {
   const content = text.trim()
   if (!content || state.busy) return
   if (!state.currentId) {
@@ -124,7 +124,7 @@ async function send(text: string, effort = ''): Promise<void> {
   state.messages.push(placeholder)
 
   try {
-    await ChatService.SendMessage(state.currentId, content, effort)
+    await ChatService.SendMessage(state.currentId, content, effort, useTools)
   } catch (e) {
     placeholder.streaming = false
     placeholder.failed = true

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,9 @@ type ChatService struct {
 	// mcpMu 守卫 mcpClients：按 endpoint 复用 MCP 客户端（懒初始化会话）。
 	mcpMu      sync.Mutex
 	mcpClients map[string]*mcp.Client
+
+	// logger 调试日志（写入 bin/chatty.log）；未 Attach 时为空实现。
+	logger *slog.Logger
 }
 
 // NewChatService 构造聊天服务。settings 会被深拷贝保存到 settingsPath。
@@ -173,11 +177,25 @@ func (s *ChatService) ListModels(baseURL, apiKey string) ([]string, error) {
 	return p.ListModels(ctx)
 }
 
+// AttachLogger 注入调试日志器（main 里指向 bin/chatty.log）。
+func (s *ChatService) AttachLogger(l *slog.Logger) {
+	if l != nil {
+		s.logger = l
+	}
+}
+
+func (s *ChatService) logf(msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.Info(msg, args...)
+	}
+}
+
 // SendMessage 把用户消息追加到会话并异步流式请求模型。
 // effort 取值 ""|"low"|"medium"|"high"，作为 reasoning_effort 透传。
+// useTools 为 true 时把已配置的 MCP 工具随请求提供给模型。
 // 返回错误表示同步失败（会话不存在 / 正忙 / 未配置）；流式期间的
 // 增量/结束/错误通过 chat:delta / chat:done / chat:error 事件推送。
-func (s *ChatService) SendMessage(sessionID, text, effort string) error {
+func (s *ChatService) SendMessage(sessionID, text, effort string, useTools bool) error {
 	switch effort {
 	case "", "low", "medium", "high":
 	default:
@@ -195,11 +213,17 @@ func (s *ChatService) SendMessage(sessionID, text, effort string) error {
 	s.busy[sessionID] = true
 	s.mu.Unlock()
 
-	go s.runCompletion(sessionID, text, effort)
+	s.logf("SendMessage",
+		"session", sessionID,
+		"model", s.settings.ActiveModel,
+		"effort", effort,
+		"useTools", useTools,
+		"text", firstRunes(text, 60))
+	go s.runCompletion(sessionID, text, effort, useTools)
 	return nil
 }
 
-func (s *ChatService) runCompletion(sessionID, text, effort string) {
+func (s *ChatService) runCompletion(sessionID, text, effort string, useTools bool) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.busy, sessionID)
@@ -254,12 +278,20 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		s.emitter.Emit("chat:thinking", ChatThinkingEvent{SessionID: sessionID, Text: t})
 	}
 
-	// MCP 工具集合（此完成周期的固定快照）
-	kit := s.mcpKit(ctx)
-	for _, w := range kit.warnings {
-		emitThink("[MCP] " + w + "\n")
+	// MCP 工具集合（此完成周期的固定快照；开关关闭时为 nil）
+	var kit *mcpKit
+	if useTools {
+		kit = s.mcpKit(ctx)
+		for _, w := range kit.warnings {
+			emitThink("[MCP] " + w + "\n")
+			s.logf("MCP warning", "session", sessionID, "warning", w)
+		}
 	}
-	req := llm.ChatRequest{Model: s.settings.ActiveModel, ReasoningEffort: effort, Tools: kit.tools()}
+	req := llm.ChatRequest{Model: s.settings.ActiveModel, ReasoningEffort: effort}
+	if kit != nil {
+		req.Tools = kit.tools()
+	}
+	s.logf("completion start", "session", sessionID, "roundsMax", 8, "tools", len(req.Tools))
 	if sp := trimSpace(s.settings.SystemPrompt); sp != "" {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleSystem, Content: sp})
 	}
@@ -273,9 +305,12 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		round++
 		res, err := prov.StreamChat(ctx, req, emitDelta, emitThink)
 		if err != nil {
+			s.logf("round error", "session", sessionID, "round", round, "err", err.Error())
 			emitErr("请求失败: " + err.Error())
 			return
 		}
+		s.logf("round done", "session", sessionID, "round", round,
+			"stop", res.StopReason, "contentLen", len(res.Content), "toolCalls", len(res.ToolCalls))
 
 		// 记录本轮 assistant 消息（含 tool_calls，回传给兼容端点必须带上）
 		hist := llm.Message{Role: llm.RoleAssistant, Content: res.Content}
@@ -287,6 +322,11 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		if len(res.ToolCalls) == 0 {
 			break // 本轮直接给出最终文本
 		}
+		if kit == nil {
+			s.logf("tool call but tools disabled", "session", sessionID, "round", round)
+			emitErr("模型请求了工具但 MCP 已关闭，已中止")
+			return
+		}
 		if round >= maxRounds {
 			emitErr("工具调用轮次过多，已停止（可能陷入循环）")
 			return
@@ -295,12 +335,18 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		// 依次执行工具，结果以 tool 角色回传
 		for _, tc := range res.ToolCalls {
 			name := tc.Function.Name
+			argsPreview := truncateStr(string(tc.Function.Arguments), 200)
 			emitThink("调用了工具 " + name + "\n")
+			s.logf("tool call", "session", sessionID, "round", round, "name", name, "args", argsPreview)
+			startT := time.Now()
 			out, callErr := s.execTool(ctx, kit, tc)
 			if callErr != nil {
 				out = "[工具执行失败] " + callErr.Error()
+				s.logf("tool error", "session", sessionID, "name", name, "elapsedMs", time.Since(startT).Milliseconds(), "err", callErr.Error())
 			} else if out == "" {
 				out = "（工具无返回）"
+			} else {
+				s.logf("tool ok", "session", sessionID, "name", name, "elapsedMs", time.Since(startT).Milliseconds(), "outLen", len(out))
 			}
 			req.Messages = append(req.Messages, llm.Message{
 				Role:       llm.RoleTool,
@@ -316,6 +362,7 @@ func (s *ChatService) runCompletion(sessionID, text, effort string) {
 		content = strings.TrimSpace(req.Messages[len(req.Messages)-1].Content)
 	}
 	thinkingText := strings.TrimSpace(think.String())
+	s.logf("completion done", "session", sessionID, "contentLen", len(content), "thinkingLen", len(thinkingText))
 	if _, err := s.store.AppendMessage(sessionID, chat.RoleAssistant, content, thinkingText); err != nil {
 		emitErr(err.Error())
 		return
@@ -425,6 +472,15 @@ func labelOr(label, id string) string {
 		return trimSpace(label)
 	}
 	return id
+}
+
+// truncateStr 安全截断到 n 个字符（按 rune，避免切坏 UTF-8）。
+func truncateStr(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // safeToolName 把 MCP 工具名转成 OpenAI 兼容端点接受的名字

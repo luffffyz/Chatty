@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -53,7 +54,24 @@ func main() {
 	}
 	defer store.Close()
 
-	chatSvc := NewChatService(store, cfg, settingsPath, nil)
+	// 调试日志：bin/chatty.log（追加写）。聊天/工具/流式阶段细节都在这里。
+	if exePath, err := os.Executable(); err == nil {
+		logPath := filepath.Join(filepath.Dir(exePath), "chatty.log")
+		if lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			defer lf.Close()
+			chatSvc := NewChatService(store, cfg, settingsPath, nil)
+			chatSvc.AttachLogger(slog.New(slog.NewTextHandler(lf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+			run(chatSvc)
+			return
+		} else {
+			log.Printf("open log file %s: %v", logPath, err)
+		}
+	}
+	run(NewChatService(store, cfg, settingsPath, nil))
+}
+
+// run 构造窗口并启动应用。chatSvc 已在调用方创建并注入日志器。
+func run(chatSvc *ChatService) {
 
 	app := application.New(application.Options{
 		Name:        "Chatty",

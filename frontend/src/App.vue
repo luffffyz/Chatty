@@ -12,6 +12,8 @@ const showSettings = ref(false)
 const bodyEl = ref<HTMLElement | null>(null)
 // 思考深度(reasoning_effort): 空=不发送(low|medium|high)；默认 low
 const effort = ref<'' | 'low' | 'medium' | 'high'>('low')
+// MCP 工具开关：默认开；关闭时请求不带任何工具
+const mcpOn = ref(true)
 
 async function scrollBottom() {
   await nextTick()
@@ -38,7 +40,7 @@ watch(
 function submit() {
   const text = input.value
   input.value = ''
-  send(text, effort.value)
+  send(text, effort.value, mcpOn.value)
 }
 
 function pickEffort(v: string) {
@@ -119,6 +121,16 @@ function fmtTime(ms: number): string {
             @click="pickEffort(opt.v)"
           >
             {{ opt.label }}
+          </button>
+          <span class="composer__effort-sep"></span>
+          <button
+            type="button"
+            class="effort-chip"
+            :class="{ 'effort-chip--on': mcpOn }"
+            :title="mcpOn ? 'MCP 工具已开启' : 'MCP 工具已关闭'"
+            @click="mcpOn = !mcpOn"
+          >
+            MCP {{ mcpOn ? '开' : '关' }}
           </button>
         </div>
         <div class="composer__row">
@@ -309,6 +321,12 @@ function fmtTime(ms: number): string {
   border-color: var(--accent);
   background: var(--accent-weak);
   color: var(--accent);
+}
+.composer__effort-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 4px;
 }
 .effort-chip:disabled {
   opacity: 0.5;

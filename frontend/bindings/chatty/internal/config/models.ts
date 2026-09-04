@@ -27,7 +27,7 @@ export interface Appearance {
  */
 export interface MCPServer {
     /**
-     * 唯一标识，同时用作工具名前缀 "serverID::tool"
+     * 唯一标识；暴露给模型时工具名形如 "serverID_tool"
      */
     "id": string;
 
