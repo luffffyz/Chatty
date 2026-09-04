@@ -2,10 +2,13 @@ package main
 
 import (
 	"embed"
+	"io"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"chatty/internal/chat"
 	"chatty/internal/config"
@@ -70,6 +73,50 @@ func main() {
 	run(NewChatService(store, cfg, settingsPath, nil))
 }
 
+// winFontsDir 返回系统字体目录（默认 C:\Windows\Fonts）。
+func winFontsDir() string {
+	if d := os.Getenv("WINDIR"); d != "" {
+		return filepath.Join(d, "Fonts")
+	}
+	return `C:\Windows\Fonts`
+}
+
+// sysFonts 白名单：允许通过 /sysfonts/<name> 提供给前端的系统字体。
+// 供 typst wasm 排版使用（避免把中文字体打进 exe）。键为 URL 文件名。
+var sysFonts = map[string]string{
+	"msyh.ttc":   filepath.Join(winFontsDir(), "msyh.ttc"),   // Microsoft YaHei
+	"msyhbd.ttc": filepath.Join(winFontsDir(), "msyhbd.ttc"), // Microsoft YaHei Bold
+}
+
+// assetServer 包装前端静态资源：额外提供 /sysfonts/ 动态路由（读取白名单内的
+// 系统字体文件），其余路径交给 wails 的内置 asset server。
+func assetServer() http.Handler {
+	base := application.AssetFileServerFS(assets)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/sysfonts/")
+		if name != r.URL.Path {
+			src, ok := sysFonts[name]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			f, err := os.Open(src)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			defer f.Close()
+			w.Header().Set("Content-Type", "font/collection")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			if _, err := io.Copy(w, f); err != nil {
+				log.Printf("serve sysfont %s: %v", name, err)
+			}
+			return
+		}
+		base.ServeHTTP(w, r)
+	})
+}
+
 // run 构造窗口并启动应用。chatSvc 已在调用方创建并注入日志器。
 func run(chatSvc *ChatService) {
 
@@ -80,7 +127,7 @@ func run(chatSvc *ChatService) {
 			application.NewService(chatSvc),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler: assetServer(),
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

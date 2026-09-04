@@ -43,7 +43,7 @@ async function compile() {
   // wrapper 前置；提示词已要求模型不要写 #set page/text/import。
   const wrapped =
     `#set page(width: ${widthPt}pt, height: auto, margin: (x: 0pt, y: 8pt), fill: none)\n` +
-    `#set text(size: ${sizePt}pt, fill: rgb("${textHex()}"), font: ("Libertinus Serif", "MiSans"))\n` +
+    `#set text(size: ${sizePt}pt, fill: rgb("${textHex()}"), font: ("Libertinus Serif", "Microsoft YaHei"))\n` +
     `#set par(leading: 1.05em)\n\n` +
     props.source
   try {

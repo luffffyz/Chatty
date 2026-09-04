@@ -13,8 +13,8 @@ import type { BeforeBuildFn } from '@myriaddreamin/typst.ts'
 import compilerWasmUrl from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url'
 import rendererWasmUrl from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer_bg.wasm?url'
 
-// public/fonts 下打包的字体（含两个 ~24MB 的思源宋全量）。
-// 默认 typst-assets 三组 25 个 + 思源 Bold。
+// public/fonts 下打包的字体；中文不再打包——由后端代理系统字体
+//（Go 从 C:\Windows\Fonts 提供 msyh.ttc / msyhbd.ttc）。
 const FONT_NAMES: string[] = [
   'DejaVuSansMono-Bold.ttf',
   'DejaVuSansMono-BoldOblique.ttf',
@@ -30,9 +30,6 @@ const FONT_NAMES: string[] = [
   'LibertinusSerif-Regular.otf',
   'LibertinusSerif-Semibold.otf',
   'LibertinusSerif-SemiboldItalic.otf',
-  // MiSans（免费商用黑体）：常规 + Bold
-  'MiSans-Regular.otf',
-  'MiSans-Bold.otf',
   'NewCM10-Bold.otf',
   'NewCM10-BoldItalic.otf',
   'NewCM10-Italic.otf',
@@ -44,18 +41,22 @@ const FONT_NAMES: string[] = [
   'Roboto-Regular.ttf',
 ]
 
-// 逐个、容忍失败地加载字体：某个字体（尤其 ~24MB 大文件）下载失败只
-// 告警并跳过，不让整批 fetch 失败中断排版。顺序加载避免并发洪峰。
+// 系统字体（后端 /sysfonts 代理）：Microsoft YaHei 系列（ttc）。
+const SYSTEM_FONT_URLS: string[] = ['/sysfonts/msyh.ttc', '/sysfonts/msyhbd.ttc']
+
+// 逐个、容忍失败地加载字体：下载失败只告警并跳过，不让整批 fetch 失败
+// 中断排版。顺序加载避免并发洪峰。系统字体同路径加载（ttc collection）。
 const installFonts = (async (...args: unknown[]) => {
   const ctx = args[1] as {
     ref: { loadFonts: (builder: unknown, urls: string[]) => Promise<unknown> }
     builder: unknown
   }
-  for (const name of FONT_NAMES) {
+  const urls = [...FONT_NAMES.map((name) => `/fonts/${name}`), ...SYSTEM_FONT_URLS]
+  for (const url of urls) {
     try {
-      await ctx.ref.loadFonts(ctx.builder, [`/fonts/${name}`])
+      await ctx.ref.loadFonts(ctx.builder, [url])
     } catch (e) {
-      console.warn('[typst] 字体加载失败，已跳过:', name, e)
+      console.warn('[typst] 字体加载失败，已跳过:', url, e)
     }
   }
 }) as BeforeBuildFn
